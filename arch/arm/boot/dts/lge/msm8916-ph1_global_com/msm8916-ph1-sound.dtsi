@@ -11,7 +11,7 @@
  */
 
 &soc {
-fmradio_iris:	qcom,iris-fm {
+	qcom,iris-fm {
 		compatible = "qcom,iris_fm";
 		qcom,fm-sw-gpio = <&msm_gpio 52 0>;
 		xm,vdd_fm_sw-supply = <&pm8916_l18>;
@@ -110,5 +110,5 @@ fmradio_iris:	qcom,iris-fm {
 };
 
 &pm8916_tombak_dig {
-    qcom,cdc-micbias-cfilt-mv = <2200000>; /* Headset MIC BIAS V2.2 */
+    qcom,cdc-micbias-cfilt-mv = <2800000>; /* Headset MIC BIAS V2.8 */
 };

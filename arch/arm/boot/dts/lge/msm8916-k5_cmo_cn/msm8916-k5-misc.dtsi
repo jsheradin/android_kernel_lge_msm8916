@@ -15,7 +15,7 @@
 		compatible = "seiko,hall-s5712";
 		interrupt-parent = <&msm_gpio>;
 		hallic-pouch-irq-gpio = <&msm_gpio 117 0x00>;
-		status = "disabled";
+		status = "ok";
 	};
 };
 

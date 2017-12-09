@@ -128,10 +128,9 @@ struct ExtWatchFontDataConfig {
 	u8	*Data;		/* Font Data (53120 bytes) */
 };
 
-#define cfg_offset		(0x2D3)
 #define EXT_WATCH_FONT_OFFSET		(0x07F)
 #define EXT_WATCH_FONT_ADDR			(0x307)
-#define EXT_WATCH_FONT_DN_ADDR_INFO	(0x2D2)
+#define EXT_WATCH_FONT_DN_ADDR_INFO	(0x2F7)
 #define EXT_WATCH_FONT_CRC	0xC18
 #define EXT_WATCH_DCS_CTRL	0xC19
 #define EXT_WATCH_MEM_CTRL	(0xC1A)

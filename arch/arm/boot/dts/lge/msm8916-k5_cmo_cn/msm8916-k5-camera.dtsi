@@ -17,7 +17,6 @@
 		status = "ok";
 		cell-index = <0>;
 		reg = <0x0>;
-		revision = "rev_a...";
 		qcom,otp-name = "ov8858";
 		compatible = "ovt,ov8858-otp";
 		qcom,slave-addr = <0x6c>;
@@ -78,7 +77,6 @@
 		status = "ok";
 		compatible           = "qcom,ov8858";
 		reg                  = <0x1>;
-		revision = "rev_a...";
 		qcom,slave-id        = <0x6c 0x300b 0x8858>;
 		qcom,csiphy-sd-index = <1>;
 		qcom,csid-sd-index   = <1>;

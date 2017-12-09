@@ -158,14 +158,6 @@ static struct wcd9xxx_mbhc_config wcd9xxx_mbhc_cfg = {
 	.use_vddio_meas = true,
 	.enable_anc_mic_detect = false,
 	.hw_jack_type = FOUR_POLE_JACK,
-	.key_code[0] = KEY_MEDIA,
-	.key_code[1] = KEY_VOICECOMMAND,
-	.key_code[2] = KEY_VOLUMEUP,
-	.key_code[3] = KEY_VOLUMEDOWN,
-	.key_code[4] = 0,
-	.key_code[5] = 0,
-	.key_code[6] = 0,
-	.key_code[7] = 0,
 };
 
 static void *def_codec_mbhc_cal(void)
@@ -218,21 +210,21 @@ static void *def_codec_mbhc_cal(void)
 	btn_high = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg,
 					       MBHC_BTN_DET_V_BTN_HIGH);
 	btn_low[0] = -50;
-	btn_high[0] = 90;
-	btn_low[1] = 130;
-	btn_high[1] = 220;
-	btn_low[2] = 235;
-	btn_high[2] = 335;
-	btn_low[3] = 375;
-	btn_high[3] = 655;
-	btn_low[4] = 656;
-	btn_high[4] = 660;
-	btn_low[5] = 661;
-	btn_high[5] = 670;
-	btn_low[6] = 671;
-	btn_high[6] = 680;
-	btn_low[7] = 681;
-	btn_high[7] = 690;
+	btn_high[0] = 110;
+	btn_low[1] = 111;
+	btn_high[1] = 190;
+	btn_low[2] = 191;
+	btn_high[2] = 359;
+	btn_low[3] = 360;
+	btn_high[3] = 750;
+	btn_low[4] = 751;
+	btn_high[4] = 752;
+	btn_low[5] = 753;
+	btn_high[5] = 754;
+	btn_low[6] = 755;
+	btn_high[6] = 756;
+	btn_low[7] = 757;
+	btn_high[7] = 758;
 	n_ready = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_N_READY);
 	n_ready[0] = 80;
 	n_ready[1] = 12;
@@ -327,7 +319,7 @@ if (!flag_mute_spk_for_swirrc){
 			*/
 			set_amp_gain(spk-1, MSM8939_SPK_ON);
 			msm8939_ext_spk_pamp |= spk;
-			printk("%s: CONFIG_SND_SOC_TPA2028D_STEREO.  spk = %d\n",__func__,spk);
+			pr_debug("%s: CONFIG_SND_SOC_TPA2028D_STEREO.  spk = %d\n",__func__,spk);
 		}
 #else
 		if (gpio_is_valid(ext_spk_amp_gpio)) {
@@ -374,7 +366,7 @@ static void msm8939_ext_spk_power_amp_off(u32 spk)
 		//if(boost_on && (spk & LO_2_SPK_AMP)){
 		if (ext_boost_gpio >= 0) {
 			gpio_direction_output(ext_boost_gpio, 0);
-			printk("%s: Disabled 5V external supply for external amp. spk = %d\n",
+			pr_debug("%s: Disabled 5V external supply for external amp. spk = %d\n",
 					__func__,spk);
 
 			set_amp_gain(spk-1, MSM8939_SPK_OFF);
@@ -409,7 +401,7 @@ static int msm8939_ext_spkramp_event(struct snd_soc_dapm_widget *w,
 			struct snd_kcontrol *k, int event)
 {
 
-	pr_err("%s()\n", __func__);
+	pr_debug("%s()\n", __func__);
 
 	if (SND_SOC_DAPM_EVENT_ON(event)) {
 		if (!strncmp(w->name, "Lineout_1 amp", 14))
@@ -2250,7 +2242,7 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 	},
 	//TODO:CHECK Hw27, 28
 	/*
-	{ // hw:x,27 
+	{ // hw:x,27
 		.name = "QUAT_MI2S Hostless",
 		.stream_name = "QUAT_MI2S Hostless",
 		.cpu_dai_name = "QUAT_MI2S_RX_HOSTLESS",
@@ -2265,7 +2257,7 @@ static struct snd_soc_dai_link msm8x16_dai[] = {
 		.codec_dai_name = "snd-soc-dummy-dai",
 		.codec_name = "snd-soc-dummy",
 	},
-	{ // hw:x, 28 
+	{ // hw:x, 28
 		.name = "QCHAT",
 		.stream_name = "QCHAT",
 		.cpu_dai_name   = "QCHAT",

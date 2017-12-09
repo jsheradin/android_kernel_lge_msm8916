@@ -143,6 +143,14 @@ enum lge_boot_mode_type {
 #ifdef CONFIG_LGE_USB_G_ANDROID
 int  __init lge_add_android_usb_devices(void);
 #endif
+
+#if defined(CONFIG_LGE_QSDL_SUPPORT)
+int lge_get_bootreason(void);
+#endif
+#if defined(CONFIG_LGE_LCD_OFF_DIMMING)
+int lge_get_bootreasoncode(void);
+#endif
+
 enum lge_boot_mode_type lge_get_boot_mode(void);
 int lge_get_factory_boot(void);
 #endif

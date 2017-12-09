@@ -428,7 +428,6 @@ void clk_disable(struct clk *clk)
 		clk_disable(parent);
 	}
 	clk->count--;
-
 out:
 	spin_unlock_irqrestore(&clk->lock, flags);
 }

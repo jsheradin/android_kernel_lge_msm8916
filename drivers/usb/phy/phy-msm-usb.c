@@ -69,11 +69,6 @@
 #ifdef CONFIG_LGE_PM
 #include <linux/power_supply.h>
 #endif
-
-#ifdef CONFIG_LGE_TOUCH_CORE
-#include <linux/input/lge_touch_notify.h>
-#endif
-
 #ifdef CONFIG_LGE_USB_G_DISABLE_USBID_PULL_UP
 static enum lge_boot_mode_type lge_boot_mode;
 #endif
@@ -191,7 +186,9 @@ static struct power_supply *psy;
 #endif
 
 #if defined(CONFIG_CHG_DETECTOR_MAX14656)
+#if defined(CONFIG_LGE_PM_FLOATED_CHARGER)
 static int max14656_dcd_timeout;
+#endif
 static struct power_supply *max14656_psy;
 #endif
 
@@ -2016,6 +2013,9 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 	if (charger_type == motg->chg_type)
 		return 0;
 #if defined(CONFIG_LGE_PM_FLOATED_CHARGER)
+	if (motg->chg_type != USB_FLOATED_CHARGER)
+		power_supply_set_floated_charger(&motg->usb_psy, 0);
+
 	if (motg->chg_type == USB_SDP_CHARGER)
 		charger_type = POWER_SUPPLY_TYPE_USB;
 	else if (motg->chg_type == USB_CDP_CHARGER)
@@ -2029,14 +2029,14 @@ static int msm_otg_notify_chg_type(struct msm_otg *motg)
 		motg->chg_type == USB_ACA_C_CHARGER))
 		charger_type = POWER_SUPPLY_TYPE_USB_ACA;
 	else if (motg->chg_type == USB_FLOATED_CHARGER) {
-//		charger_type = POWER_SUPPLY_TYPE_USB_DCP;
-		charger_type = POWER_SUPPLY_TYPE_USB;
+		charger_type = POWER_SUPPLY_TYPE_USB_DCP;
+//		charger_type = POWER_SUPPLY_TYPE_USB;
 //		power_supply_set_floated_charger(&motg->usb_psy, 1);
 		if (motg->dcd_timeout_cnt == DCD_TIMEOUT_CNT_MIN) {
 			pr_info("assumed as floated charger\n");
 			power_supply_set_floated_charger(&motg->usb_psy, 1);
 //			power_supply_set_floated_charger(&motg->usb_psy, 2);
-			msm_otg_notify_power_supply(motg, IDEV_CHG_MIN);
+			msm_otg_notify_power_supply(motg, IDEV_CHG_MIN-1);
 		}
 	}
 	else {
@@ -2325,6 +2325,7 @@ static int msm_otg_notify_power_supply(struct msm_otg *motg, unsigned mA)
 bottom:
 #endif
 #endif
+
 	power_supply_changed(psy);
 	return 0;
 
@@ -2390,9 +2391,7 @@ static void msm_otg_notify_charger(struct msm_otg *motg, unsigned mA)
 
 	if (motg->cur_power == mA)
 		return;
-#ifdef CONFIG_LGE_TOUCH_CORE
-	touch_notify_connect(motg->chg_type);
-#endif
+
 	dev_info(motg->phy.dev, "Avail curr from USB = %u\n", mA);
 	msm_otg_dbg_log_event(&motg->phy, "AVAIL CURR FROM USB",
 			mA, motg->chg_type);
@@ -3981,7 +3980,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				case USB_FLOATED_CHARGER:
 #ifdef CONFIG_LGE_PM_FLOATED_CHARGER
 					if(!motg->dcd_timeout_cnt) {
-						msm_otg_notify_charger(motg, IUNIT);
+						msm_otg_notify_charger(motg, IDEV_CHG_MIN);
 					}
 #endif
 
@@ -4523,7 +4522,7 @@ static void msm_otg_sm_work(struct work_struct *w)
 				case USB_FLOATED_CHARGER:
 #ifdef CONFIG_LGE_PM_FLOATED_CHARGER
 					if(!motg->dcd_timeout_cnt) {
-						msm_otg_notify_charger(motg, IUNIT);
+						msm_otg_notify_charger(motg, IDEV_CHG_MIN);
 					}
 #endif
 #if defined(CONFIG_LGE_PM_FLOATED_CHARGER)
@@ -4692,7 +4691,7 @@ static void msm_otg_sm_work(struct work_struct *w)
                 case USB_FLOATED_CHARGER:
 #ifdef CONFIG_LGE_PM_FLOATED_CHARGER
 					if(!motg->dcd_timeout_cnt) {
-						msm_otg_notify_charger(motg, IUNIT);
+						msm_otg_notify_charger(motg, IDEV_CHG_MIN);
 					}
 #endif
 #if defined(CONFIG_LGE_PM_FLOATED_CHARGER)
@@ -6796,7 +6795,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 		ret = -ENOMEM;
 		goto devote_bus_bw;
 	}
-	dev_info(&pdev->dev, "OTG regs = %p\n", motg->regs);
+	dev_info(&pdev->dev, "OTG regs = %pK\n", motg->regs);
 
 	if (pdata->enable_sec_phy) {
 		res = platform_get_resource_byname(pdev,
@@ -7143,7 +7142,7 @@ static int msm_otg_probe(struct platform_device *pdev)
 				goto remove_phy;
 			}
 		} else {
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_LGE_USB_G_MSM_OTG_ENABLE) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BC_SPR_US) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && !defined(CONFIG_LGE_USB_G_MSM_OTG_ENABLE) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BC_SPR_US) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined(CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined(CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && \
 	 !defined(CONFIG_MACH_MSM8939_PH2_GLOBAL_COM)
 			ret = -ENODEV;

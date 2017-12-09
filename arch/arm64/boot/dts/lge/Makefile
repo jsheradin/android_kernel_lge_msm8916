@@ -3,6 +3,9 @@ ifeq ($(CONFIG_OF),y)
 ifeq ($(CONFIG_MACH_MSM8939_ALTEV2_VZW),y)
         DTS_TARGET := altev2_vzw
 else 
+ifeq ($(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR),y)
+        DTS_TARGET := altev2_kr_com
+else
 ifeq ($(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM),y)
         DTS_TARGET := p1b_global_com
 else
@@ -17,12 +20,17 @@ endif
 endif
 endif
 endif
+endif
 DTS_TARGET_DIR := msm8939-$(DTS_TARGET)
 
 ifeq ($(CONFIG_MACH_MSM8939_ALTEV2_VZW),y)
 dtb-y += msm8939-$(DTS_TARGET).dtb \
          msm8936-$(DTS_TARGET).dtb
 else 
+ifeq ($(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR),y)
+dtb-y += msm8939-$(DTS_TARGET).dtb \
+         msm8936-$(DTS_TARGET).dtb
+else
 ifeq ($(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM),y) 
 dtb-y += msm8939-p1b.dtb
 
@@ -37,6 +45,7 @@ dtb-y += msm8939-p1bssn.dtb
 else
 dtb-y += msm8939-$(DTS_TARGET).dtb \
          msm8936-$(DTS_TARGET).dtb
+endif
 endif
 endif
 endif

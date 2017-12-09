@@ -50,6 +50,7 @@ bool test_busy = false;
 
 
 extern int mip_i2c_write(struct i2c_client *client, char *write_buf, unsigned int write_len);
+extern bool lge_get_mfts_mode(void);
 
 /**
 * Read ISC status
@@ -2272,16 +2273,19 @@ int mit_lpwg_test(struct i2c_client *client)
         int si;
 
 
-	msleep(1000);
-	// lpwg debug 1
-  lpwg_debug_enable(client, 1);
-
-  msleep(10);
-  // lpwg start
-  lpwg_start(client);
-	msleep(10);
-
-	for (i = 0 ; i < ts->dev.row_num ; i++) {
+// lpwg debug 1
+	if(!lge_get_mfts_mode()){
+		msleep(1000);
+		lpwg_debug_enable(client, 1);
+		msleep(10);
+		// lpwg start
+		lpwg_start(client);
+		msleep(10);
+	}
+	else {
+		msleep(2000);
+	}
+    for (i = 0 ; i < ts->dev.row_num ; i++) {
 		memset(ts->mit_data[i], 0, sizeof(uint16_t) * ts->dev.col_num);
 	}
 

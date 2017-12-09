@@ -48,6 +48,9 @@
 		qcom,freq-mitigation-temp = <110>;
 		qcom,freq-mitigation-temp-hysteresis = <20>;
 		qcom,freq-mitigation-value = <960000>;
+		qcom,limit-temp = <90>;
+		qcom,freq-step = <1>;
+		qcom,core-limit-temp = <100>;
 		};
 };
 

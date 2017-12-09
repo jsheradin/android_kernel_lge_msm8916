@@ -94,6 +94,8 @@ struct max17050_chip {
 	int prev_soc;
 	int last_soc;
 
+	int recal;
+
 /* test debug */
 	int before_soc_rep;
 	int before_soc_vf;
@@ -298,8 +300,12 @@ int max17050_get_capacity_percent(void)
 		/* 106.9% scailing */
 
 		/* Cutoff SoC different By Cell */
-		if (((battery_soc/10) < 1) && ((battery_soc%10) >= 1))
+		if (cell_info == LGC_LLL) {
+			if (((battery_soc/10) < 1) && ((battery_soc%10) >= 5))
 				battery_soc = 10;
+		}
+		/* cell_info == TCD_AAC */
+		/* No round off */
 
 		battery_soc /= 10;
 
@@ -308,8 +314,13 @@ int max17050_get_capacity_percent(void)
 				- (ref->pdata->rescale_factor);
 		/* 106.9% scailing */
 
-		if (((battery_soc_vf/10) < 1) && ((battery_soc_vf%10) >= 1))
+		/* Cutoff SoC different By Cell */
+		if (cell_info == LGC_LLL) {
+			if (((battery_soc_vf/10) < 1) && ((battery_soc_vf%10) >= 5))
 				battery_soc_vf = 10;
+		}
+		/* cell_info == TCD_AAC */
+		/* No round off */
 
 		battery_soc_vf /= 10;
 
@@ -406,7 +417,9 @@ int max17050_write_temp(void)
 	int batt_temp_raw;
 
 	u16 read_reg;
+#ifdef CONFIG_LGE_PM_MAX17050_SOC_VF
 	u16 write_temp;
+#endif
 
 	union power_supply_propval val = {0,};
 
@@ -417,6 +430,7 @@ int max17050_write_temp(void)
 		batt_temp_raw = val.intval;
 		pr_debug("batt_temp_raw from power_supply : %d\n", batt_temp_raw);
 
+#ifdef CONFIG_LGE_PM_MAX17050_SOC_VF
 		if(batt_temp_raw < 0) /*Negative temperature*/
 			write_temp = 0xFF00 & (u16)(batt_temp_raw * 256 / 10);
 		else /*Positive temperature*/
@@ -426,6 +440,7 @@ int max17050_write_temp(void)
 
 		/*At least 3mS of delay added between Write and Read functions*/
 		msleep(4);
+#endif
 
 		read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_TEMPERATURE);
 		pr_debug("battery_temp %X\n", read_reg);
@@ -443,7 +458,7 @@ int max17050_write_temp(void)
 
 	pr_debug("battery_temp %d\n", battery_temp);
 
-	return battery_temp;
+	return batt_temp_raw;
 }
 
 int max17050_read_battery_age(void)
@@ -464,6 +479,79 @@ int max17050_read_battery_age(void)
 	pr_debug("%s: battery_age = %d\n", __func__, battery_age);
 
 	return battery_age;
+}
+
+#define REM_CAP_DECREASE_VAL 20
+void max17050_battery_capacity_compensate(int battery_full_cap,
+		int battery_rem_cap, int before_soc_rep,
+		int before_soc_vf, int battery_soc, int battery_current)
+{
+	u16 read_reg;
+
+	/* Full charging case */
+	if (battery_rem_cap > battery_full_cap) {
+		pr_info("[Full chg] full_cap and rem_cap before rewrite : full_cap = %d, rem_cap = %d\n",
+				battery_full_cap, battery_rem_cap);
+		/* Full&Rem cap errors are occurred*/
+		/* so default full capacity value should be rewrited */
+		if (battery_full_cap > 2050) {
+			pr_info("[Full chg] CASE1 full cap error, rem cap error\n");
+			max17050_i2c_write_and_verify(MAX17050_FULL_CAP,
+					ref->pdata->capacity);
+			max17050_write_reg(max17050_i2c_client, MAX17050_DESIGN_CAP,
+					ref->pdata->vf_fullcap);
+			max17050_i2c_write_and_verify(MAX17050_FULL_CAP_NOM,
+					ref->pdata->vf_fullcap);
+
+			max17050_i2c_write_and_verify(MAX17050_REM_CAP_REP,
+					ref->pdata->capacity);
+
+			read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_FULL_CAP);
+			battery_full_cap = (5 * read_reg) / 10;
+			read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_REM_CAP_REP);
+			battery_rem_cap = (5 * read_reg) / 10;
+		}
+		/* Only rem cap error is occurred, so rem cap should be changed to full cap */
+		else {
+			pr_info("[Full chg] CASE2 Only rem cap error\n");
+			read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_FULL_CAP);
+
+			max17050_i2c_write_and_verify(MAX17050_REM_CAP_REP,
+					read_reg);
+			read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_REM_CAP_REP);
+			battery_rem_cap = (5 * read_reg) / 10;
+		}
+		pr_info("[Full chg] full_cap and rem_cap rewrite : full_cap = %d, rem_cap = %d\n",
+				battery_full_cap, battery_rem_cap);
+	}
+	/* Not full charging */
+	else {
+		pr_info("[Not chg] full_cap and rem_cap before rewrite : full_cap = %d, rem_cap = %d\n",
+				battery_full_cap, battery_rem_cap);
+		/* Without changing SOC, full cap and rem cap are changed */
+		if (battery_full_cap > 2050) {
+			pr_info("[Not chg] CASE3 Only full cap error\n");
+			max17050_i2c_write_and_verify(MAX17050_FULL_CAP,
+					ref->pdata->capacity);
+			max17050_write_reg(max17050_i2c_client, MAX17050_DESIGN_CAP,
+					ref->pdata->vf_fullcap);
+			max17050_i2c_write_and_verify(MAX17050_FULL_CAP_NOM,
+					ref->pdata->vf_fullcap);
+			/*new Full cap*/
+			read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_FULL_CAP);
+			battery_full_cap = (5 * read_reg) / 10;
+			/*new Rem cap*/
+			battery_rem_cap = battery_full_cap * before_soc_rep / 1000;
+
+			read_reg = (battery_rem_cap * 10) / 5;
+			max17050_i2c_write_and_verify(MAX17050_REM_CAP_REP,
+					read_reg);
+		}
+	}
+	pr_info("[Not chg] full_cap and rem_cap rewrite : full_cap = %d, rem_cap = %d\n",
+			battery_full_cap, battery_rem_cap);
+
+	return;
 }
 
 bool max17050_battery_full_info_print(void)
@@ -521,13 +609,18 @@ bool max17050_battery_full_info_print(void)
 
 	read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_RCOMP_0);
 
-	pr_info("F_Cap : %d ( %d ), T_Emp : %d, I_batt : %d ( %d ), V_batt : %d, OCV: %d,\
-		TEMP : %d, SOC : %d, RawSOC_REP : %d ( %d ), SOC_VF : %d ( %d ),\
-		RCOMP : 0x%X\n",
+	pr_info("F_Cap : %d ( %d ), T_Emp : %d, I_batt : %d, ( %d ), V_batt : %d, OCV : %d,"
+		"TEMP : %d, SOC : %d, SOC_REP : %d ( %d ), SOC_VF : %d ( %d ),"
+		"RCOMP : 0x%X\n",
 		battery_full_cap, battery_remain_capacity, battery_time_to_empty_sec/60,
 		battery_current, ref->avg_ibatt, battery_voltage, battery_voltage_ocv,
 		battery_temp, battery_soc, ref->soc_rep, ref->before_soc_rep,
 		ref->soc_vf, ref->before_soc_vf, read_reg);
+
+	if ((battery_full_cap > 2050) || (battery_remain_capacity > 2050)) {
+		max17050_battery_capacity_compensate(battery_full_cap, battery_remain_capacity,
+			ref->before_soc_rep, ref->before_soc_vf, battery_soc, battery_current);
+	}
 
 	return 0;
 }
@@ -617,6 +710,10 @@ static int max17050_new_custom_model_write(void)
 	u8 read_custom_model_A0[MODEL_SIZE];
 
 	pr_info("Model_data Start\n");
+
+	read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_CUSTOMVER);
+	ref->recal = read_reg;
+	pr_info("MAX17050_CUSTOMVER = %d\n", ref->recal);
 
 	/*0. Check for POR or Battery Insertion*/
 	read_reg = max17050_read_reg(max17050_i2c_client, MAX17050_STATUS);
@@ -1392,9 +1489,9 @@ static int max17050_probe(struct i2c_client *client,
 		cable_type = 0;
 
 	if (cable_type == LT_CABLE_56K || cable_type == LT_CABLE_130K ||
-					cable_type == LT_CABLE_910K) {
+		cable_type == LT_CABLE_910K) {
 		lge_power_init_flag_max17050 = 1;
-		pr_info("cable_type is = %d factory_mode quick start \n", cable_type);
+		pr_info("cable_type is = %d factory_mode and chargerlogo quick start \n", cable_type);
 	}
 #endif
 
@@ -1456,6 +1553,11 @@ static int max17050_probe(struct i2c_client *client,
 	/*Check to enable external battery temperature from CONFIG*/
 	chip->use_ext_temp = (chip->pdata->config & CFG_EXT_TEMP_BIT);
 	pr_info("use_ext_temp = %d\n", chip->use_ext_temp);
+
+	if ((lge_get_boot_mode() == LGE_BOOT_MODE_CHARGERLOGO) && (ref->recal == 1)){
+		lge_power_init_flag_max17050 = 1;
+		pr_info("Chargerlogo after no battery booting : quick start \n");
+	}
 
 #ifdef CONFIG_LGE_PM_MAX17050_SOC_ALERT
 	if (client->irq) {
@@ -1551,10 +1653,12 @@ static int max17050_pm_prepare(struct device *dev)
 	cancel_delayed_work_sync(&ref->max17050_monitor_work);
 
 	chip->suspended = true;
+#ifdef CONFIG_LGE_PM_MAX17050_SOC_ALERT
 	if (chip->client->irq) {
 		disable_irq(chip->client->irq);
 		enable_irq_wake(chip->client->irq);
 	}
+#endif
 	return 0;
 }
 
@@ -1564,11 +1668,12 @@ static void max17050_pm_complete(struct device *dev)
 	struct max17050_chip *chip = i2c_get_clientdata(client);
 
 	chip->suspended = false;
+#ifdef CONFIG_LGE_PM_MAX17050_SOC_ALERT
 	if (chip->client->irq) {
 		disable_irq_wake(chip->client->irq);
 		enable_irq(chip->client->irq);
 	}
-
+#endif
 	/* Schedule update, if needed */
 	schedule_delayed_work(&ref->max17050_monitor_work, msecs_to_jiffies(HZ));
 }

@@ -52,13 +52,10 @@ int32_t msm_eeprom_checksum_lgit(struct msm_eeprom_ctrl_t *e_ctrl) {
 				rc = msm_eeprom_checksum_lgit_v0d(e_ctrl);
 			}
 			break;
-        case 0xff:
 		default:
-			if(!strncmp("at24c16d", e_ctrl->eboard_info->eeprom_name, 8)) {
-				rc = msm_eeprom_checksum_lgit_mn34153(e_ctrl);
-			} else if(!strncmp("hi553", e_ctrl->eboard_info->eeprom_name, 5)) {
+			pr_info("eeprom ver = 0x%x\n", eeprom_ver);
+			if(!strncmp("hi553", e_ctrl->eboard_info->eeprom_name, 5))
 				rc = msm_eeprom_checksum_lgit_hi553(e_ctrl);
-			}
 			break;
 	}
 	return rc;

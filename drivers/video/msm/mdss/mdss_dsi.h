@@ -61,7 +61,6 @@
 #define LG4895_REV0 0
 #define LG4895_REV1 1
 #define LG4895_REV2 2
-#define LG4895_REV3 3
 #else
 #define DB7400_CUT5 5
 #define DB7400_CUT6 6
@@ -449,8 +448,7 @@ struct mdss_dsi_ctrl_pdata {
 	int pwm_enabled;
 	int clk_lane_cnt;
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
-	struct notifier_block   block_notif;
-	struct notifier_block   atomic_notif;
+	struct notifier_block   notif;
 #endif
 	bool panel_bias_vreg;
 	bool dsi_irq_line;
@@ -558,8 +556,6 @@ struct mdss_dsi_ctrl_pdata {
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
 	struct lge_pan_data *lge_pan_data;
 #endif
-
-	bool dfps_status;	/* dynamic refresh status */
 };
 
 struct dsi_status_data {
@@ -572,10 +568,10 @@ int dsi_panel_device_register(struct device_node *pan_node,
 				struct mdss_dsi_ctrl_pdata *ctrl_pdata);
 
 int mdss_dsi_cmds_tx(struct mdss_dsi_ctrl_pdata *ctrl,
-		struct dsi_cmd_desc *cmds, int cnt, int use_dma_tpg);
+		struct dsi_cmd_desc *cmds, int cnt);
 
 int mdss_dsi_cmds_rx(struct mdss_dsi_ctrl_pdata *ctrl,
-			struct dsi_cmd_desc *cmds, int rlen, int use_dma_tpg);
+			struct dsi_cmd_desc *cmds, int rlen);
 
 void mdss_dsi_host_init(struct mdss_panel_data *pdata);
 void mdss_dsi_op_mode_config(int mode,

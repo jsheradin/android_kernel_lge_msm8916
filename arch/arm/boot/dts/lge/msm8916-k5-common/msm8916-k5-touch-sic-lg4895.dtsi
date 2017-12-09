@@ -53,7 +53,7 @@
 			qcom,infinite-mode = <0>;
 			qcom,ver-reg-exists;
 
-			/*qcom,use-bam;*/
+			qcom,use-bam;
 			qcom,bam-consumer-pipe-index = <12>;
 			qcom,bam-producer-pipe-index = <13>;
 			qcom,rt-priority;
@@ -88,15 +88,12 @@
 				sw_reset_delay = <10>;
 				use_lpwg = <1>;
 				use_lpwg_test = <1>;
-				hide_coordinate = <1>;
 
 				/* firmware */
-				fw_image = "touch/k5/L0W49P1_1_12.img";
+				fw_image = "touch/k5/L0W49P1_0_27.img";
 
 				panel_spec = "touch/k5/k5_limit.txt";
 				panel_spec_mfts_folder = "touch/k5/k5_limit_mfts.txt";
-				jitter_spec = <49>;
-				jitter_avg_spec = <34>;
 
 				/* ASC */
 				use_asc = <0>;

@@ -31,9 +31,6 @@
 * Manifest Constants / Defines
 ****************************************************************************/
 #define NAME_BUFFER_SIZE 	128
-#if defined(TOUCH_LPWG_JITTER_AVG)
-#define LPWG_AVERAGE_JITTER 20
-#endif
 
 /****************************************************************************
  * Macros
@@ -58,7 +55,6 @@ static const char defaultFirmware[3][50] = {
 
 static struct melfas_ts_data *ts = NULL;
 int cover_status = 0;
-int use_quick_window = 0;
 
 #if defined(ENABLE_SWIPE_MODE)
 static int get_swipe_mode = 1;
@@ -70,9 +66,6 @@ extern int lockscreen_stat;
 
 extern struct workqueue_struct* touch_wq;
 extern int cradle_smart_cover_status(void);
-#if defined(TOUCH_LPWG_JITTER_AVG)
-extern uint16_t mit_data[MAX_ROW][MAX_COL];
-#endif
 
 int channelstatus_check;
 /****************************************************************************
@@ -90,24 +83,6 @@ u8 event_size = 0;
 /****************************************************************************
 * Local Functions
 ****************************************************************************/
-#if defined(CONFIG_MACH_MSM8916_PH1_KR)
-static void change_rebase_condition(void)
-{
-    u8 wbuf[4];
-    struct i2c_client *client = Touch_Get_I2C_Handle();
-
-    wbuf[0] = 0x67;
-    wbuf[1] = 0x35;
-    wbuf[2] = -50;
-
-    if( Mit300_I2C_Write(client, wbuf, 3) ) {
-       TOUCH_ERR("change_rebase_condition failed\n");
-    } else {
-       TOUCH_LOG("change_rebase_condition\n");
-    }
-}
-#endif
-
 static void change_cover_func(int cover_status)
 {
     u8 wbuf[4];
@@ -928,26 +903,6 @@ static ssize_t show_pen_support(TouchDriverData *pDriverData, char *buf)
 	return ret;
 }
 
-static ssize_t store_use_quick_window(TouchDriverData *pDriverData, const char *buf, size_t count)
-{
-	int value;
-	sscanf(buf, "%d", &value);
-
-	if ( (value == 1) && (use_quick_window == 0) ) {
-		use_quick_window = 1;
-	} else if ( (value == 0) && (use_quick_window == 1) ) {
-		use_quick_window = 0;
-	} else {
-		return count;
-	}
-
-	TOUCH_LOG("use quick window = %s\n",
-			(use_quick_window == 1) ?
-			"USE_QUICK_WIN" : "UNUSE_QUICK_WIN");
-
-	return count;
-}
-
 static LGE_TOUCH_ATTR(fw_dump, S_IRUSR | S_IWUSR, show_fw_dump, NULL);
 static LGE_TOUCH_ATTR(lpwg_debug_enable, S_IRUGO | S_IWUSR, show_lpwg_debug_enable, store_lpwg_debug_enable);
 static LGE_TOUCH_ATTR(lpwg_fail_reason, S_IRUGO | S_IWUSR, show_lpwg_fail_reason, store_lpwg_fail_reason);
@@ -959,7 +914,6 @@ static LGE_TOUCH_ATTR(rawdata, S_IRUGO | S_IWUSR, show_rawdata, store_rawdata);
 static LGE_TOUCH_ATTR(intensity, S_IRUGO | S_IWUSR, show_intensity, NULL);
 static LGE_TOUCH_ATTR(reg_control,  S_IRUGO | S_IWUSR, NULL, store_reg_control);
 static LGE_TOUCH_ATTR(pen_support, S_IRUGO | S_IWUSR, show_pen_support, NULL);
-static LGE_TOUCH_ATTR(use_quick_window, S_IRUGO | S_IWUSR, NULL, store_use_quick_window);
 
 static struct attribute *MIT300_attribute_list[] = {
 	&lge_touch_attr_fw_dump.attr,
@@ -973,7 +927,6 @@ static struct attribute *MIT300_attribute_list[] = {
 	&lge_touch_attr_intensity.attr,
 	&lge_touch_attr_reg_control.attr,
 	&lge_touch_attr_pen_support.attr,
-	&lge_touch_attr_use_quick_window.attr,
 	NULL,
 };
 
@@ -989,13 +942,9 @@ static int MIT300_Initialize(TouchDriverData *pDriverData)
 		return TOUCH_FAIL;
 	}
 	ts->client = client;
-	ts->lpwg_fail_reason = 0; // fail reason always on for event version
+	ts->lpwg_fail_reason = 1; // fail reason always on for event version
 	bootmode = pDriverData->bootMode;
 	TOUCH_LOG("factory boot check : %d\n", bootmode);
-#if defined(CONFIG_MACH_MSM8916_PH1_KR)
-	if (bootmode == BOOT_MINIOS)
-		change_rebase_condition();
-#endif
 	return TOUCH_SUCCESS;
 }
 
@@ -1030,10 +979,6 @@ void MIT300_Reset(int status, int delay)
 	if (status){
 		TouchEnableIrq();
 		change_cover_func(cover_status);
-#if defined(CONFIG_MACH_MSM8916_PH1_KR)
-		if (bootmode == BOOT_MINIOS)
-			change_rebase_condition();
-#endif
 	}
 }
 
@@ -1169,7 +1114,7 @@ static int MIT300_InterruptHandler(TouchReadData *pData)
 
 				pData->count++;
 				pFingerData->status = FINGER_PRESSED;
-				if ( cradle_smart_cover_status() && use_quick_window ) {
+				if ( cradle_smart_cover_status() && cover_status ) {
 					if ( pFingerData->x < 614 ) {
 						pFingerData->status = FINGER_UNUSED;
 					}
@@ -1663,14 +1608,6 @@ static int MIT300_DoSelfDiagnosis_Lpwg(int* lpwgStatus, char* pBuf, int bufSize,
 	int dataLen = 0;
 	int lpwgjitterStatus = 0;
 	int lpwgabsStatus = 0;
-#if defined(TOUCH_LPWG_JITTER_AVG)
-	int i,j = 0;
-	int jitterAverageStatus = 0;
-	s16 average_jitter[MAX_ROW][2] = {{0},{0}};
-	int max_avg_left = 0;
-	int max_avg_right = 0;
-	int sum_specjitter = LPWG_AVERAGE_JITTER * ((MAX_COL / 2) - 4); // Only PH1 (Column : 18)
-#endif
 	memset(pBuf, 0, bufSize);
 	*pDataLen = 0;
 
@@ -1706,75 +1643,6 @@ static int MIT300_DoSelfDiagnosis_Lpwg(int* lpwgStatus, char* pBuf, int bufSize,
 	msleep(30);
 	memset(pBuf, 0, bufSize);
 
-#if defined(TOUCH_LPWG_JITTER_AVG)
-	// lpwg_jitter column average check
-	ret = sprintf(pBuf,"[LPWG Jitter Average Result]\n");
-	TOUCH_LOG("======= LPWG Jitter Average =======\n");
-	for (i = 0; i < MAX_ROW; i++) {
-		TOUCH_LOG("[%2d]", i);
-		//for (j = (MAX_COL / 2); j >= 0; j--) {
-		for (j = 0; j <= (MAX_COL /2); j++) {
-			if (j < 5) {
-				average_jitter[i][0] += mit_data[i][j]; // Column (0~4)
-			} else {
-				average_jitter[i][1] += mit_data[i][j]; // Column (5~9)
-			}
-			printk("%5d", mit_data[i][j]);
-		}
-		printk("\n");
-
-		if ((average_jitter[i][0] > sum_specjitter) && (average_jitter[i][1] > sum_specjitter)) {
-			ret += sprintf(pBuf + ret,"[%2d] !%4d, !%4d\n",
-				i,
-				average_jitter[i][0] / ((MAX_COL / 2) - 4),
-				average_jitter[i][1] / ((MAX_COL / 2) - 4));
-			jitterAverageStatus = TOUCH_FAIL;
-		} else if (average_jitter[i][0] > sum_specjitter) {
-			ret += sprintf(pBuf + ret,"[%2d] !%4d, %5d\n",
-				i,
-				average_jitter[i][0] / ((MAX_COL / 2) - 4),
-				average_jitter[i][1] / ((MAX_COL / 2) - 4));
-			jitterAverageStatus = TOUCH_FAIL;
-		} else if (average_jitter[i][1] > sum_specjitter) {
-			ret += sprintf(pBuf + ret,"[%2d] %5d, !%4d\n",
-				i,
-				average_jitter[i][0] / ((MAX_COL / 2) - 4),
-				average_jitter[i][1] / ((MAX_COL / 2) - 4));
-			jitterAverageStatus = TOUCH_FAIL;
-		} else {
-			ret += sprintf(pBuf + ret,"[%2d] %5d, %5d\n",
-				i,
-				average_jitter[i][0] / ((MAX_COL / 2) - 4),
-				average_jitter[i][1] / ((MAX_COL / 2) - 4));
-		}
-	}
-
-	max_avg_left = (average_jitter[0][0] < average_jitter[1][0]) ? average_jitter[1][0] : average_jitter[0][0];
-	max_avg_right = (average_jitter[0][1] < average_jitter[1][1]) ? average_jitter[1][1] : average_jitter[0][1];
-	for (i = 2; i < MAX_ROW; i++) {
-		if (max_avg_left < average_jitter[i][0])
-			max_avg_left = average_jitter[i][0];
-
-		if (max_avg_right < average_jitter[i][1])
-			max_avg_right = average_jitter[i][1];
-	}
-
-	if (jitterAverageStatus == TOUCH_SUCCESS) {
-		TOUCH_LOG("======= LPWG Jitter Avg. is PASS!! =======\n");
-		ret += sprintf(pBuf + ret,"LPWG Jitter Avg Result is PASS\n");
-	} else {
-		TOUCH_LOG("======= LPWG Jitter Avg. is FAIL!! =======\n");
-		ret += sprintf(pBuf + ret,"LPWG Jitter Avg Result is FAIL\n");
-	}
-	ret += sprintf(pBuf + ret,"MAX AVG L/R = (%d/%d), SPEC(LGD = 16/SET = %d)\n\n",
-		(max_avg_left / ((MAX_COL / 2) - 4)),
-		(max_avg_right / ((MAX_COL / 2) - 4)),
-		LPWG_AVERAGE_JITTER);
-
-	MIT300_WriteFile(sd_path, pBuf, 0);
-	memset(pBuf, 0, bufSize);
-#endif
-
 	// lpwg_abs check
 	ret = MIT300_GetTestResult(client, pBuf, &lpwgabsStatus, LPWG_ABS_SHOW);
 	if (ret < 0) {
@@ -1786,13 +1654,9 @@ static int MIT300_DoSelfDiagnosis_Lpwg(int* lpwgStatus, char* pBuf, int bufSize,
 	msleep(30);
 	memset(pBuf, 0, bufSize);
 
-#if defined(TOUCH_LPWG_JITTER_AVG)
-	dataLen += sprintf(pBuf, "LPWG Test : %s", ((lpwgjitterStatus + jitterAverageStatus + lpwgabsStatus) == TOUCH_SUCCESS) ? "Pass\n" : "Fail\n");
-	*lpwgStatus = (lpwgjitterStatus + jitterAverageStatus + lpwgabsStatus);
-#else
 	dataLen += sprintf(pBuf, "LPWG Test : %s", ((lpwgjitterStatus + lpwgabsStatus) == TOUCH_SUCCESS) ? "Pass\n" : "Fail\n");
 	*lpwgStatus = (lpwgjitterStatus + lpwgabsStatus);
-#endif
+
 	*pDataLen = dataLen;
 
 	mip_lpwg_debug_enable(client, 0);

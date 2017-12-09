@@ -179,3 +179,4 @@
 		qcom,vadc-channel = <0x10>; /* MPP 2 */
 	};
 };
+

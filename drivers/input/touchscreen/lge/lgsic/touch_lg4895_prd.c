@@ -14,10 +14,6 @@
  *
  */
 #define TS_MODULE "[prd]"
-#define GET_MAX(x,y,z)	((z)>(((x)>(y))?(x):(y))?	\
-			(z):(((x)>(y))?(x):(y)))
-#define EVEN		(0)
-#define ODD		(1)
 
 #include <linux/kernel.h>
 #include <linux/module.h>
@@ -44,38 +40,10 @@
 static char line[50000];
 static char W_Buf[BUF_SIZE];
 static u16 M2_Rawdata_buf[ROW_SIZE*COL_SIZE];
-static u16 M2_Rawdata_even_buf[ROW_SIZE*COL_SIZE];
-static u16 M2_Rawdata_odd_buf[ROW_SIZE*COL_SIZE];
-static u16 M2_Jitter_buf[ROW_SIZE*COL_SIZE];
 static u16 M1_Rawdata_buf[ROW_SIZE*M1_COL_SIZE];
 static u16 LowerImage[ROW_SIZE][COL_SIZE];
 static u16 UpperImage[ROW_SIZE][COL_SIZE];
-static int jitter_max_value[JITTER_TEST_CNT][4];
-static int jitter_max;
-static int jitter_avg_max;
-static int total_jmax, total_avg_jmax;
 static atomic_t block_prd;
-static int read_memory(struct device *dev, u16 w_addr,
-	u32 w_data, u16 w_size, u16 r_addr, u8 *r_buff, u32 r_size)
-{
-        u16 nToRead = r_size;
-
-	if ( NULL == r_buff ) {
-		TOUCH_E("%s : fail\n", __func__);
-		return -ENOMEM;
-	}
-
-       if(lg4895_reg_write( dev , w_addr , &w_data, sizeof(u32))<0){
-                TOUCH_E("reg addr 0x%x ReadMemory->write fail\n", w_addr);
-                return -1;
-        }
-
-        if(lg4895_reg_read(dev , r_addr , r_buff , nToRead)<0){
-                TOUCH_E("reg addr 0x%x ReadMemory->read fail\n", r_addr);
-                return -1;
-        }
-        return 1;
-}
 
 static void log_file_size_check(struct device *dev)
 {
@@ -217,7 +185,6 @@ static void write_file(struct device *dev, char *data, int write_time)
 		sys_chmod(fname, 0666);
 	} else {
 		TOUCH_E("%s : fname is NULL, can not open FILE\n", __func__);
-		set_fs(old_fs);
 		return;
 	}
 
@@ -254,15 +221,14 @@ static int write_test_mode(struct device *dev, u8 type)
 	switch (type) {
 	case OPEN_NODE_TEST:
 		testmode = (disp_mode << 8) + type;
-		waiting_time = 100;
+		waiting_time = 10;
 		break;
 	case SHORT_NODE_TEST:
 		testmode = (disp_mode << 8) + type;
-		waiting_time = 100;
+		waiting_time = 1000;
 		break;
 	case U3_M2_RAWDATA_TEST:
 		testmode = (disp_mode << 8) + type;
-		waiting_time = 100;
 		break;
 	case U0_M1_RAWDATA_TEST:
 		type = 0x6;
@@ -272,17 +238,13 @@ static int write_test_mode(struct device *dev, u8 type)
 		type = 0x5;
 		testmode = type;
 		break;
-	case JITTER_TEST:
-		testmode = BLU_JITTER_TEST_CMD|LINE_FILTER_OPTION;
-		waiting_time = 200;
-		break;
 	}
 
 	/* TestType Set */
 	lg4895_reg_write(dev, tc_tsp_test_ctl,
 			(u8 *)&testmode,
 			sizeof(testmode));
-	TOUCH_I("write testmode = 0x%x\n", testmode);
+	TOUCH_I("write testmode = %x\n", testmode);
 	touch_msleep(waiting_time);
 
 	/* Check Test Result - wait until 0 is written */
@@ -304,108 +266,59 @@ error:
 	return 0;
 }
 
-static int prd_os_result_read(struct device *dev,
-	u16 *buf, int type, u32 data_size)
+static int prd_os_result_get(struct device *dev, u32 *buf)
 {
-	int ret = 0;
-	u32 diff_data_offset = 0;
+	u32 os_result_offset;
+	u32 offset;
 
-	if ( NULL == buf ) {
-		TOUCH_E("buf is null exception\n");
-		ret = 1;
-		goto error;
+	lg4895_reg_read(dev, PROD_os_result_tune_code_offset,
+		(u8 *)&os_result_offset, sizeof(u32));
+	offset = os_result_offset & 0xFFFF;
+
+	TOUCH_I("LFD_ON 0x0B84, LFD_OFF 0x0CC4 : [%x]", offset);
+	lg4895_reg_write(dev, tc_tsp_test_data_offset,
+			(u8 *)&offset,
+			sizeof(u32));
+
+	lg4895_reg_read(dev, tc_tsp_data_access_addr,
+		(u8 *)buf, sizeof(u32)*ROW_SIZE);
+
+	return 0;
+}
+
+static int prd_os_xline_result_read(struct device *dev,
+	u8 (*buf)[COL_SIZE], int type)
+{
+	int i = 0;
+	int j = 0;
+	u32 buffer[ROW_SIZE] = {0,};
+	int ret = 0;
+	u8 w_val = 0x0;
+
+	switch (type) {
+	case OPEN_NODE_TEST:
+		w_val = 0x1;
+		break;
+	case SHORT_NODE_TEST:
+		w_val = 0x2;
+		break;
 	}
 
-	ret = lg4895_reg_read(dev, prod_open3_short_offset,
-		&diff_data_offset, sizeof(u32));
-	TOUCH_I("%s : %x\n", __func__, diff_data_offset);
+	ret = prd_os_result_get(dev, buffer);
 
-	if (ret) {
-		return ret;
-	} else {
-		switch (type) {
-			case OPEN_NODE_TEST:
-				diff_data_offset &= 0xFFFF;
-				break;
-			case SHORT_NODE_TEST:
-				diff_data_offset = (diff_data_offset >> 16);
-				break;
+	if (ret == 0) {
+		for (i = 0; i < ROW_SIZE; i++) {
+			for (j = 0; j < COL_SIZE; j++) {
+				if ((buffer[i] & (0x1 << j)) != 0)
+					buf[i][j] =
+						(buf[i][j] | w_val);
+			}
 		}
 	}
-	ret = lg4895_reg_write(dev, tc_tsp_test_data_offset, 
-		&diff_data_offset, sizeof(u32));
-	if (ret) {
-		return ret;
-	} else {
-		ret = lg4895_reg_read(dev, tc_tsp_data_access_addr,
-		buf, sizeof(u16)*data_size);
-		if (ret)
-			return ret;
-	}
 
-error:
 	return ret;
 }
 
-static void prnit_prd_open_short_result(u16 *open_buf, u16 *short_buf)
-{
-	int i=0, j=0;
-	int ret=0;
-
-	TOUCH_I("%s : O/S test is fail\n", __func__);
-	if (NULL == open_buf || NULL == short_buf)
-		goto error;
-
-	/* open test result */
-	TOUCH_I("open test result\n");
-	ret += snprintf(W_Buf + ret, BUF_SIZE - ret, " OPEN TEST RESULT\n ");
-	for (i = 0; i < COL_SIZE; i++)
-		ret += snprintf(W_Buf + ret, BUF_SIZE - ret, " [%2d] ", i);
-
-	for (i = 0; i < ROW_SIZE; i++) {
-		char log_buf[LOG_BUF_SIZE] = {0, };
-		int log_ret = 0;
-
-		ret += snprintf(W_Buf + ret, BUF_SIZE - ret,  "\n[%2d], ", i);
-		log_ret += snprintf(log_buf + log_ret,
-				LOG_BUF_SIZE - log_ret,  "[%2d]  ", i);
-		for (j = 0; j < COL_SIZE; j++) {
-			ret += snprintf(W_Buf + ret, BUF_SIZE - ret,
-					"%5d, ", open_buf[i*COL_SIZE+j]);
-			log_ret += snprintf(log_buf + log_ret,
-					LOG_BUF_SIZE - log_ret,
-					"%5d ", open_buf[i*COL_SIZE+j]);
-		}
-		TOUCH_I("%s\n", log_buf);
-	}
-	ret += snprintf(W_Buf + ret, BUF_SIZE - ret, "\n");
-
-	TOUCH_I("short test result\n");
-	ret += snprintf(W_Buf + ret, BUF_SIZE - ret, " SHORT TEST RESULT\n ");
-	ret += snprintf(W_Buf + ret, BUF_SIZE - ret, "\n");
-	/* short test result */
-	for ( i=0; i<RAWDATA_SIZE*RAWDATA_SIZE; i++) {
-			char log_buf[LOG_BUF_SIZE] = {0, };
-			int log_ret = 0;
-
-			ret += snprintf(W_Buf + ret, BUF_SIZE - ret,  "\n[%2d], ", i);
-			log_ret += snprintf(log_buf + log_ret,
-					LOG_BUF_SIZE - log_ret,  "[%2d]  ", i);
-			for (j = 0; j < ROW_SIZE; j++) {
-				ret += snprintf(W_Buf + ret, BUF_SIZE - ret,
-						"%5d, ", short_buf[i*ROW_SIZE+j]);
-				log_ret += snprintf(log_buf + log_ret,
-						LOG_BUF_SIZE - log_ret,
-						"%5d ", short_buf[i*ROW_SIZE+j]);
-			}
-			TOUCH_I("%s\n", log_buf);
-		}
-		ret += snprintf(W_Buf + ret, BUF_SIZE - ret, "\n");
-	return ;
-error:
-	TOUCH_E("mem fail\n");
-	return ;
-}
 static int prd_open_short_test(struct device *dev)
 {
 	int type = 0;
@@ -414,17 +327,14 @@ static int prd_open_short_test(struct device *dev)
 	u32 open_result = 0;
 	u32 short_result = 0;
 	u32 openshort_all_result = 0;
-	u16 *open_buf = NULL;
-	u16 *short_buf = NULL;
-	u32 data_size = 0;
-
-	open_buf = kzalloc(sizeof(u16)*ROW_SIZE*COL_SIZE,
-					GFP_KERNEL);
-	short_buf = kzalloc(sizeof(u16)*ROW_SIZE*RAWDATA_SIZE*RAWDATA_SIZE,
-					GFP_KERNEL);
+	u8 buf[ROW_SIZE][COL_SIZE];
+	int i = 0;
+	int j = 0;
 
 	/* Test Type Write */
 	write_file(dev, "[OPEN_SHORT_ALL_TEST]\n", TIME_INFO_SKIP);
+
+	memset(&buf, 0x0, sizeof(buf));
 
 	/* 1. open_test */
 	type = OPEN_NODE_TEST;
@@ -439,8 +349,7 @@ static int prd_open_short_test(struct device *dev)
 	TOUCH_I("open_result = %d\n", open_result);
 
 	if (open_result) {
-		data_size = ROW_SIZE*COL_SIZE;
-		ret = prd_os_result_read(dev, open_buf, type, data_size);
+		ret = prd_os_xline_result_read(dev, buf, type);
 		openshort_all_result |= 0x1;
 	}
 
@@ -453,37 +362,49 @@ static int prd_open_short_test(struct device *dev)
 	}
 
 	lg4895_reg_read(dev, tc_tsp_test_pf_result,
-			(u8 *)&short_result, sizeof(short_result));
+		(u8 *)&short_result, sizeof(short_result));
 	TOUCH_I("short_result = %d\n", short_result);
 
 	if (short_result) {
-		data_size = ROW_SIZE*RAWDATA_SIZE*RAWDATA_SIZE;
-		ret = prd_os_result_read(dev, short_buf, type, data_size);
+		ret = prd_os_xline_result_read(dev, buf, type);
 		openshort_all_result |= 0x2;
 	}
 
 	/* fail case */
 	if (openshort_all_result != 0) {
-		prnit_prd_open_short_result(open_buf, short_buf);
+		ret = snprintf(W_Buf, BUF_SIZE, "\n   : ");
+		for (i = 0; i < COL_SIZE; i++)
+			ret += snprintf(W_Buf + ret,
+					BUF_SIZE - ret,
+					" [%2d] ", i);
 
+		for (i = 0; i < ROW_SIZE; i++) {
+			ret += snprintf(W_Buf + ret,
+					BUF_SIZE - ret,
+					"\n[%2d] ", i);
+
+			for (j = 0; j < COL_SIZE; j++) {
+				ret += snprintf(W_Buf + ret,
+					BUF_SIZE - ret, "%5s ",
+				((buf[i][j] & 0x3) == 0x3) ?  "O,S" :
+				((buf[i][j] & 0x1) == 0x1) ?  "O" :
+				((buf[i][j] & 0x2) == 0x2) ?  "S" : "-");
+			}
+		}
+		ret += snprintf(W_Buf + ret, BUF_SIZE - ret, "\n");
 	} else
 		ret = snprintf(W_Buf + ret, BUF_SIZE - ret,
 				"OPEN_SHORT_ALL_TEST : Pass\n");
 
 	write_file(dev, W_Buf, TIME_INFO_SKIP);
 
-	kfree(open_buf);
-	kfree(short_buf);
-
 	return openshort_all_result;
 }
+
 static void prd_read_rawdata(struct device *dev, u8 type)
 {
 	u32 raw_offset_info = 0;
 	u16 raw_offset = 0;
-	u32 m2_raw_data_odd_offset = 0;
-	u32 m2_raw_data_even_offset = 0;
-	int ret = 0;
 
 	int __m1_frame_size = ROW_SIZE*M1_COL_SIZE*RAWDATA_SIZE;
 	int __m2_frame_size = ROW_SIZE*COL_SIZE*RAWDATA_SIZE;
@@ -496,75 +417,46 @@ static void prd_read_rawdata(struct device *dev, u8 type)
 		__m2_frame_size = (((__m2_frame_size >> 2) + 1) << 2);
 
 	lg4895_reg_read(dev, tc_tsp_test_off_info,
-			(u8 *)&raw_offset_info, sizeof(u32));
+		(u8 *)&raw_offset_info, sizeof(u32));
 
 	switch (type) {
-		case U0_M1_RAWDATA_TEST:
-			raw_offset = raw_offset_info & 0xFFFF;
-			lg4895_reg_write(dev, tc_tsp_test_data_offset,
-					(u8 *)&raw_offset,
-					sizeof(u32));
-			memset(M1_Rawdata_buf, 0, sizeof(M1_Rawdata_buf));
-			memset(M1_Rawdata_temp, 0, sizeof(M1_Rawdata_buf));
-			lg4895_reg_read(dev, tc_tsp_data_access_addr,
-					(u8 *)&M1_Rawdata_temp,
-					__m1_frame_size);
+	case U0_M1_RAWDATA_TEST:
+		raw_offset = raw_offset_info & 0xFFFF;
+		lg4895_reg_write(dev, tc_tsp_test_data_offset,
+				(u8 *)&raw_offset,
+				sizeof(u32));
+		memset(M1_Rawdata_buf, 0, sizeof(M1_Rawdata_buf));
+		memset(M1_Rawdata_temp, 0, sizeof(M1_Rawdata_buf));
+		lg4895_reg_read(dev, tc_tsp_data_access_addr,
+				(u8 *)&M1_Rawdata_temp,
+				__m1_frame_size);
 
-			for(i = 0; i < ROW_SIZE; i++)
-			{
-				M1_Rawdata_buf[i*2] = M1_Rawdata_temp[ROW_SIZE+i];
-				M1_Rawdata_buf[i*2+1] = M1_Rawdata_temp[i];
-			}
-			break;
-		case U3_M2_RAWDATA_TEST:
-			m2_raw_data_odd_offset = 0;
-			m2_raw_data_even_offset = 0;
-
-			ret += lg4895_reg_read(dev, prod_open1_2_offset,
-					&raw_offset_info, sizeof(u32));
-
-			m2_raw_data_odd_offset = raw_offset_info & 0xFFFF;
-			m2_raw_data_even_offset = raw_offset_info >> 16;
-
-			TOUCH_I("m2_raw_data_odd_offset : %d, m2_raw_data_even_offset : %d\n",
-				m2_raw_data_odd_offset, m2_raw_data_even_offset);
-
-			ret += lg4895_reg_write(dev, tc_tsp_test_data_offset,
-					&m2_raw_data_odd_offset, sizeof(u32));
-			memset(M2_Rawdata_odd_buf, 0x0, sizeof(M2_Rawdata_odd_buf));
-			ret += lg4895_reg_read(dev, tc_tsp_data_access_addr,
-					(u8 *)&M2_Rawdata_odd_buf, __m2_frame_size);
-
-			ret += lg4895_reg_write(dev, tc_tsp_test_data_offset,
-					&m2_raw_data_even_offset, sizeof(u32));
-			memset(M2_Rawdata_even_buf, 0x0, sizeof(M2_Rawdata_even_buf));
-			ret += lg4895_reg_read(dev, tc_tsp_data_access_addr,
-					(u8 *)&M2_Rawdata_even_buf, __m2_frame_size);
-			if (ret)
-				goto error;
-			break;
-		case U0_M2_RAWDATA_TEST:
-			raw_offset = (raw_offset_info >> 16) & 0xFFFF;
-			lg4895_reg_write(dev, tc_tsp_test_data_offset,
-					(u8 *)&raw_offset,
-					sizeof(u32));
-			memset(M2_Rawdata_buf, 0, sizeof(M2_Rawdata_buf));
-			lg4895_reg_read(dev, tc_tsp_data_access_addr,
-					(u8 *)&M2_Rawdata_buf,
-					__m2_frame_size);
-			break;
+		for(i = 0; i < ROW_SIZE; i++)
+		{
+			M1_Rawdata_buf[i*2] = M1_Rawdata_temp[ROW_SIZE+i];
+			M1_Rawdata_buf[i*2+1] = M1_Rawdata_temp[i];
+		}
+		break;
+	case U3_M2_RAWDATA_TEST:
+	case U0_M2_RAWDATA_TEST:
+		raw_offset = (raw_offset_info >> 16) & 0xFFFF;
+		lg4895_reg_write(dev, tc_tsp_test_data_offset,
+				(u8 *)&raw_offset,
+				sizeof(u32));
+		memset(M2_Rawdata_buf, 0, sizeof(M2_Rawdata_buf));
+		lg4895_reg_read(dev, tc_tsp_data_access_addr,
+				(u8 *)&M2_Rawdata_buf,
+				__m2_frame_size);
+		break;
 	}
-	return ;
-error:
-	TOUCH_E("type %d test fail \n", type);
 }
 
 static int sdcard_spec_file_read(struct device *dev)
 {
 	int ret = 0;
 	int fd = 0;
-	char *path[2] = { "/mnt/sdcard/k5_limit.txt",
-		"/mnt/sdcard/k5_limit_mfts.txt"
+	char *path[2] = { "/mnt/sdcard/h1_limit.txt",
+		"/mnt/sdcard/h1_limit_mfts.txt"
 	};
 	int path_idx = 0;
 
@@ -672,7 +564,7 @@ static int sic_get_limit(struct device *dev, char *breakpoint, u16 (*buf)[COL_SI
 		q = found - line;
 	} else {
 		TOUCH_I(
-				"failed to find breakpoint. The panel_spec_file is wrong\n");
+			"failed to find breakpoint. The panel_spec_file is wrong\n");
 		ret = -1;
 		goto error;
 	}
@@ -702,59 +594,17 @@ static int sic_get_limit(struct device *dev, char *breakpoint, u16 (*buf)[COL_SI
 		}
 	}
 
+	if (ret == 0) {
+		ret = -1;
+		goto error;
+
+	} else {
+		TOUCH_I("panel_spec_file scanning is success\n");
+		return ret;
+	}
+
 error:
 	return ret;
-}
-static int prd_print_dual_rawdata(struct device *dev, char *buf)
-{
-	int i=0,j=0;
-	int min = 9999;
-	int max = 0;
-	int ret = 0;
-	int baseline_cnt=0;
-	const int col_size = COL_SIZE;
-	u16 *rawdata_buf = M2_Rawdata_odd_buf;
-
-	TOUCH_I("this f/w use %s \n", __func__);
-
-	ret += snprintf(buf + ret, BUF_SIZE - ret, "\n");
-	for (baseline_cnt=0; baseline_cnt<2; baseline_cnt++) {
-		TOUCH_I("rawdata_buf : %p\n", rawdata_buf);
-		for (i = 0; i < col_size; i++)
-			ret += snprintf(buf + ret, BUF_SIZE - ret, " [%2d] ", i);
-
-		for (i = 0; i < ROW_SIZE; i++) {
-			char log_buf[LOG_BUF_SIZE] = {0, };
-			int log_ret = 0;
-
-			ret += snprintf(buf + ret, BUF_SIZE - ret,  "\n[%2d], ", i);
-			log_ret += snprintf(log_buf + log_ret,
-					LOG_BUF_SIZE - log_ret,  "[%2d]  ", i);
-			for (j = 0; j < col_size; j++) {
-				ret += snprintf(buf + ret, BUF_SIZE - ret,
-						"%5d, ", rawdata_buf[i*col_size+j]);
-				log_ret += snprintf(log_buf + log_ret,
-						LOG_BUF_SIZE - log_ret,
-						"%5d ", rawdata_buf[i*col_size+j]);
-				if (rawdata_buf[i*col_size+j] != 0 &&
-						rawdata_buf[i*col_size+j] < min)
-					min = rawdata_buf[i*col_size+j];
-				if (rawdata_buf[i*col_size+j] > max)
-					max = rawdata_buf[i*col_size+j];
-			}
-			TOUCH_I("%s\n", log_buf);
-		}
-		ret += snprintf(buf + ret, BUF_SIZE - ret, "\n");
-
-		ret += snprintf(buf + ret, BUF_SIZE - ret,
-				"\ndata min : %d , max : %d\n", min, max);
-		TOUCH_I("data min : %d , max : %d\n", min, max);
-
-		ret += snprintf(buf + ret, BUF_SIZE - ret, "\n");
-		rawdata_buf = M2_Rawdata_even_buf;
-	}
-	return ret;
-
 }
 
 static int prd_print_rawdata(struct device *dev, char *buf, u8 type)
@@ -770,32 +620,23 @@ static int prd_print_rawdata(struct device *dev, char *buf, u8 type)
 	ret = snprintf(buf, PAGE_SIZE, "\n   : ");
 
 	switch (type) {
-		case U0_M1_RAWDATA_TEST:
-			col_size = M1_COL_SIZE;
-			rawdata_buf = M1_Rawdata_buf;
-			break;
-		case U3_M2_RAWDATA_TEST:
-			ret = prd_print_dual_rawdata(dev, buf);
-			return ret;
-			break;
-		case U0_M2_RAWDATA_TEST:
-			col_size = COL_SIZE;
-			rawdata_buf = M2_Rawdata_buf;
-			break;
-		case JITTER_TEST:
-			col_size = COL_SIZE;
-			rawdata_buf = M2_Jitter_buf;
-			jitter_max = jitter_avg_max = 0;
-			break;
+	case U0_M1_RAWDATA_TEST:
+		col_size = M1_COL_SIZE;
+		rawdata_buf = M1_Rawdata_buf;
+		break;
+	case U0_M2_RAWDATA_TEST:
+	case U3_M2_RAWDATA_TEST:
+		col_size = COL_SIZE;
+		rawdata_buf = M2_Rawdata_buf;
+		break;
 	}
 
 	for (i = 0; i < col_size; i++)
-		ret += snprintf(buf + ret, BUF_SIZE - ret, " [%2d] ", i);
+		ret += snprintf(buf + ret, PAGE_SIZE - ret, " [%2d] ", i);
 
 	for (i = 0; i < ROW_SIZE; i++) {
 		char log_buf[LOG_BUF_SIZE] = {0, };
 		int log_ret = 0;
-		int avg_left = 0, avg_right = 0;
 
 		ret += snprintf(buf + ret, BUF_SIZE - ret,  "\n[%2d], ", i);
 		log_ret += snprintf(log_buf + log_ret,
@@ -811,29 +652,16 @@ static int prd_print_rawdata(struct device *dev, char *buf, u8 type)
 				min = rawdata_buf[i*col_size+j];
 			if (rawdata_buf[i*col_size+j] > max)
 				max = rawdata_buf[i*col_size+j];
-			if ((col_size/2) <= j)
-				avg_left += rawdata_buf[i*col_size+j];
-			else if ((col_size/2) > j)
-				avg_right += rawdata_buf[i*col_size+j];
-		}
-		if ( JITTER_TEST == type ) {
-			avg_left /= (col_size/2);
-			avg_right /= (col_size/2);
-			jitter_avg_max = GET_MAX(avg_left, avg_right, jitter_avg_max);
 		}
 		TOUCH_I("%s\n", log_buf);
 	}
-	jitter_max = max;
 
-	ret += snprintf(buf + ret, BUF_SIZE - ret, "\n");
 
-	ret += snprintf(buf + ret, BUF_SIZE - ret,
-			"\ndata min : %d , max : %d\n", min, max);
+	ret += snprintf(buf + ret, PAGE_SIZE - ret, "\n");
 
-	ret += snprintf(buf + ret, BUF_SIZE - ret,
-			"\ndata avg: %d\n", jitter_avg_max);
+	ret += snprintf(buf + ret, PAGE_SIZE - ret,
+			"\nRawdata min : %d , max : %d\n", min, max);
 
-	ret += snprintf(buf + ret, BUF_SIZE - ret, "\n");
 	return ret;
 }
 
@@ -861,7 +689,6 @@ static void write_csv_file(struct device *dev, char *data)
 		sys_chmod(fname_csv, 0666);
 	} else {
 		TOUCH_E("%s : fname is NULL, can not open FILE\n", __func__);
-		set_fs(old_fs);
 		return;
 	}
 
@@ -876,201 +703,76 @@ static void write_csv_file(struct device *dev, char *data)
 }
 
 /* Rawdata compare result
-Pass : reurn 0
-Fail : return 1
- */
+	Pass : reurn 0
+	Fail : return 1
+*/
 static int prd_compare_rawdata(struct device *dev, u8 type)
 {
+	//struct lg4895_data *d = to_lg4895_data(dev);
 	/* spec reading */
 	char lower_str[64] = {0, };
 	char upper_str[64] = {0, };
 	u16 *rawdata_buf = NULL;
-	u8 baseline_cnt = 1;
-	u8 dual_baseline = NOT_SUPPORT;
 	int col_size = 0;
 	int i, j;
 	int ret = 0;
-	int cnt = 0;
 	int result = 0;
 
 	switch (type) {
-		case U0_M1_RAWDATA_TEST:
-			snprintf(lower_str, sizeof(lower_str),
-					"DOZE2_M1_Lower");
-			snprintf(upper_str, sizeof(upper_str),
-					"DOZE2_M1_Upper");
-			col_size = M1_COL_SIZE;
-			rawdata_buf = M1_Rawdata_buf;
-			break;
-		case U0_M2_RAWDATA_TEST:
-			snprintf(lower_str, sizeof(lower_str),
-					"DOZE2_M2_Lower");
-			snprintf(upper_str, sizeof(upper_str),
-					"DOZE2_M2_Upper");
-			col_size = COL_SIZE;
-			rawdata_buf = M2_Rawdata_buf;
-			break;
-		case U3_M2_RAWDATA_TEST:
-			snprintf(lower_str, sizeof(lower_str),
-					"DOZE1_M2_Lower");
-			snprintf(upper_str, sizeof(upper_str),
-					"DOZE1_M2_Upper");
-			col_size = COL_SIZE;
-			rawdata_buf = M2_Rawdata_odd_buf;
-			dual_baseline = SUPPORT;
-			baseline_cnt = 2;
-			break;
-		case JITTER_TEST:
-			snprintf(lower_str, sizeof(lower_str),
-					"DOZE1_M2_Jitter_Lower");
-			snprintf(upper_str, sizeof(upper_str),
-					"DOZE1_M2_Jitter_Upper");
-			col_size = COL_SIZE;
-			rawdata_buf = M2_Jitter_buf;
-			break;
+	case U0_M1_RAWDATA_TEST:
+		snprintf(lower_str, sizeof(lower_str),
+				"DOZE2_M1_Lower");
+		snprintf(upper_str, sizeof(upper_str),
+				"DOZE2_M1_Upper");
+		col_size = M1_COL_SIZE;
+		rawdata_buf = M1_Rawdata_buf;
+		break;
+	case U0_M2_RAWDATA_TEST:
+		snprintf(lower_str, sizeof(lower_str),
+				"DOZE2_M2_Lower");
+		snprintf(upper_str, sizeof(upper_str),
+				"DOZE2_M2_Upper");
+		col_size = COL_SIZE;
+		rawdata_buf = M2_Rawdata_buf;
+		break;
+	case U3_M2_RAWDATA_TEST:
+		snprintf(lower_str, sizeof(lower_str),
+				"DOZE1_M2_Lower");
+		snprintf(upper_str, sizeof(upper_str),
+				"DOZE1_M2_Upper");
+		col_size = COL_SIZE;
+		rawdata_buf = M2_Rawdata_buf;
+		break;
 	}
 
-	if (sic_get_limit(dev, lower_str, LowerImage) ||
-			sic_get_limit(dev, upper_str, UpperImage)) {
-		TOUCH_E("can't read spec in the file.\n");
-		result = 1;
-		goto error;
-	} else {
-		TOUCH_I("size of Image : Lower[%d], Upper[%d]\n",
-			sizeof(LowerImage), sizeof(UpperImage));
-	}
-	for ( cnt=1; cnt<=baseline_cnt; cnt++) {
-		for (i = 0; i < ROW_SIZE; i++) {
-			for (j = 0; j < col_size; j++) {
-				if ((rawdata_buf[i*col_size+j] < LowerImage[i][j]) ||
-						(rawdata_buf[i*col_size+j] > UpperImage[i][j])) {
-					if ((type != U0_M1_RAWDATA_TEST) &&
-							(i <= 1 && j <= 4)) {
-						if (rawdata_buf[i*col_size+j] != 0) {
-							result = 1;
-							ret += snprintf(W_Buf + ret, BUF_SIZE - ret,
-									"F [%d][%d] = %d\n", i, j, rawdata_buf[i*col_size+j]);
-						}
-					} else {
+	sic_get_limit(dev, lower_str, LowerImage);
+	sic_get_limit(dev, upper_str, UpperImage);
+
+	for (i = 0; i < ROW_SIZE; i++) {
+		for (j = 0; j < col_size; j++) {
+			if ((rawdata_buf[i*col_size+j] < LowerImage[i][j]) ||
+				(rawdata_buf[i*col_size+j] > UpperImage[i][j])) {
+				if ((type != U0_M1_RAWDATA_TEST) &&
+						(i <= 1 && j <= 4)) {
+					if (rawdata_buf[i*col_size+j] != 0) {
 						result = 1;
 						ret += snprintf(W_Buf + ret, BUF_SIZE - ret,
 								"F [%d][%d] = %d\n", i, j, rawdata_buf[i*col_size+j]);
 					}
+				} else {
+					result = 1;
+					ret += snprintf(W_Buf + ret, BUF_SIZE - ret,
+							"F [%d][%d] = %d\n", i, j, rawdata_buf[i*col_size+j]);
 				}
 			}
 		}
-		if ( dual_baseline )
-			rawdata_buf = M2_Rawdata_even_buf;
 	}
 
-error:
 	return result;
 }
 
-static void BLU_jitter_enable(struct device *dev)
-{
-	struct lg4895_data *d = to_lg4895_data(dev);
-	struct touch_core_data *ts = to_touch_core(dev);
-
-	TOUCH_TRACE();
-
-	TOUCH_I("%s : work is %s\n", __func__,
-			delayed_work_pending(&d->BLU_jitter_work)?"pendding":"idle");
-	TOUCH_I("%s : sync [%d]\n", __func__,
-			queue_delayed_work(ts->wq, &d->BLU_jitter_work,	msecs_to_jiffies(10)));
-}
-
-static int prd_jitter_test(struct device *dev, u8 type,
-		int* max)
-{
-	struct touch_core_data *ts = to_touch_core(dev);
-	int write_test_mode_result = 0;
-	int jitter_result = 0;
-	u8 const BLU_jitter_test = SUPPORT;
-	u16 *buf = NULL;
-	int i = 0;
-	int j = 0;
-	int ret = 0;
-	u32 frame_cmd = 0x0;
-	u32 offset = 0;
-
-	TOUCH_TRACE();
-
-	/* Test Type Write */
-	write_file(dev, "[JITTER_TEST]\n", TIME_INFO_SKIP);
-
-	memset(&jitter_max_value[0][0], 0x0, sizeof(int)*JITTER_TEST_CNT*4);
-	total_jmax = total_avg_jmax = 0;
-	buf = M2_Jitter_buf;
-	if ( NULL != buf )
-		memset(buf, 0x0, sizeof(u16)*ROW_SIZE*COL_SIZE);
-
-	if ( lg4895_reg_read(dev, prod_open1_2_offset, &offset, sizeof(u32)) )
-		TOUCH_E("%s : read command fail \n", __func__);
-
-	for ( i=0; i<JITTER_TEST_CNT; i++) {
-		if(BLU_jitter_test) {
-			BLU_jitter_enable(dev);
-		}
-
-		/* jitter_test */
-		write_test_mode_result = write_test_mode(dev, type);
-		if (write_test_mode_result == 0) {
-			TOUCH_E("write_test_mode fail\n");
-			return 0x3;
-		}
-
-		for (j=0; j<2; j++) {
-			if (EVEN == j)
-				frame_cmd = (offset&0xFFFF);
-			else if (ODD == j)
-				frame_cmd = (offset>>16);
-
-			if (read_memory(dev, SERIAL_DATA_OFFSET, frame_cmd, sizeof(u32),
-						DATA_I2CBASE_ADDR, (u8 *)buf, sizeof(u8)*(ROW_SIZE)*(COL_SIZE)*2) < 0)
-				TOUCH_E("read memory error!!\n");
-
-			/* data print result */
-			if (NULL != W_Buf)
-				memset(W_Buf, 0x0, sizeof(char)*BUF_SIZE);
-			jitter_result = prd_print_rawdata(dev, W_Buf, type);
-			write_file(dev, W_Buf, TIME_INFO_SKIP);
-
-			/* data compare result(pass : 0 fail : 1) */
-			if (NULL != W_Buf)
-				memset(W_Buf, 0x0, sizeof(char)*BUF_SIZE);
-			jitter_result = prd_compare_rawdata(dev, type);
-			write_file(dev, W_Buf, TIME_INFO_SKIP);
-
-			/* data gettering */
-			if (EVEN == j) {
-				jitter_max_value[i][EVEN*2+JITTER_VA] = jitter_max;
-				jitter_max_value[i][EVEN*2+JITTER_AVG_VA] = jitter_avg_max;
-			}
-			else if (ODD == j) {
-				jitter_max_value[i][ODD*2+JITTER_VA] = jitter_max;
-				jitter_max_value[i][ODD*2+JITTER_AVG_VA] = jitter_avg_max;
-			}
-
-			/* data compare for the avg */
-			if ( ts->jitter_avg_spec < jitter_avg_max ) {
-				TOUCH_E("the avg value %d is over spec\n", jitter_avg_max);
-				++jitter_result;
-			}
-
-			if (jitter_result)
-				ret += jitter_result;
-		}
-		max[JITTER_VA] = GET_MAX(jitter_max_value[i][EVEN*2], jitter_max_value[i][ODD*2],
-				max[JITTER_VA]);
-		max[JITTER_AVG_VA] = GET_MAX(jitter_max_value[i][EVEN*2+1],
-				jitter_max_value[i][ODD*2+1], max[JITTER_AVG_VA]);
-	}
-
-	return ret;
-}
 static void tune_display(struct device *dev, char *tc_tune_code,
-		int offset, int type)
+	int offset, int type)
 {
 	char log_buf[tc_tune_code_size] = {0,};
 	int ret = 0;
@@ -1078,44 +780,44 @@ static void tune_display(struct device *dev, char *tc_tune_code,
 	char temp[tc_tune_code_size] = {0,};
 
 	switch (type) {
-		case 1:
-			ret = snprintf(log_buf, tc_tune_code_size,
-					"GOFT tune_code_read : ");
-			if ((tc_tune_code[offset] >> 4) == 1) {
-				temp[offset] = tc_tune_code[offset] - (0x1 << 4);
+	case 1:
+		ret = snprintf(log_buf, tc_tune_code_size,
+				"GOFT tune_code_read : ");
+		if ((tc_tune_code[offset] >> 4) == 1) {
+			temp[offset] = tc_tune_code[offset] - (0x1 << 4);
+			ret += snprintf(log_buf + ret,
+					tc_tune_code_size - ret,
+					"-%d  ", temp[offset]);
+		} else {
+			ret += snprintf(log_buf + ret,
+					tc_tune_code_size - ret,
+					" %d  ", tc_tune_code[offset]);
+		}
+		TOUCH_I("%s\n", log_buf);
+		ret += snprintf(log_buf + ret, tc_tune_code_size - ret, "\n");
+		write_file(dev, log_buf, TIME_INFO_SKIP);
+		break;
+	case 2:
+		ret = snprintf(log_buf, tc_tune_code_size,
+				"LOFT tune_code_read : ");
+		for (i = 0; i < tc_total_ch_size; i++) {
+			if ((tc_tune_code[offset+i]) >> 5 == 1) {
+				temp[offset+i] =
+					tc_tune_code[offset+i] - (0x1 << 5);
 				ret += snprintf(log_buf + ret,
 						tc_tune_code_size - ret,
-						"-%d  ", temp[offset]);
+						"-%d  ", temp[offset+i]);
 			} else {
 				ret += snprintf(log_buf + ret,
 						tc_tune_code_size - ret,
-						" %d  ", tc_tune_code[offset]);
+						" %d  ",
+						tc_tune_code[offset+i]);
 			}
-			TOUCH_I("%s\n", log_buf);
-			ret += snprintf(log_buf + ret, tc_tune_code_size - ret, "\n");
-			write_file(dev, log_buf, TIME_INFO_SKIP);
-			break;
-		case 2:
-			ret = snprintf(log_buf, tc_tune_code_size,
-					"LOFT tune_code_read : ");
-			for (i = 0; i < tc_total_ch_size; i++) {
-				if ((tc_tune_code[offset+i]) >> 5 == 1) {
-					temp[offset+i] =
-						tc_tune_code[offset+i] - (0x1 << 5);
-					ret += snprintf(log_buf + ret,
-							tc_tune_code_size - ret,
-							"-%d  ", temp[offset+i]);
-				} else {
-					ret += snprintf(log_buf + ret,
-							tc_tune_code_size - ret,
-							" %d  ",
-							tc_tune_code[offset+i]);
-				}
-			}
-			TOUCH_I("%s\n", log_buf);
-			ret += snprintf(log_buf + ret, tc_tune_code_size - ret, "\n");
-			write_file(dev, log_buf, TIME_INFO_SKIP);
-			break;
+		}
+		TOUCH_I("%s\n", log_buf);
+		ret += snprintf(log_buf + ret, tc_tune_code_size - ret, "\n");
+		write_file(dev, log_buf, TIME_INFO_SKIP);
+		break;
 	}
 }
 
@@ -1127,7 +829,7 @@ static void read_tune_code(struct device *dev, u8 type)
 	u32 offset;
 
 	lg4895_reg_read(dev, PROD_os_result_tune_code_offset,
-			(u8 *)&tune_code_offset, sizeof(u32));
+		(u8 *)&tune_code_offset, sizeof(u32));
 	offset = (tune_code_offset >> 16) & 0xFFFF;
 
 	lg4895_reg_write(dev, tc_tsp_test_data_offset,
@@ -1139,35 +841,35 @@ static void read_tune_code(struct device *dev, u8 type)
 
 	write_file(dev, "\n[Read Tune Code]\n", TIME_INFO_SKIP);
 	switch (type) {
-		case U0_M1_RAWDATA_TEST:
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_L_GOFT_OFFSET, 1);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_R_GOFT_OFFSET, 1);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_L_M1_OFT_OFFSET, 2);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_R_M1_OFT_OFFSET, 2);
-			break;
-		case U3_M2_RAWDATA_TEST:
-		case U0_M2_RAWDATA_TEST:
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_L_GOFT_OFFSET + 1, 1);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_R_GOFT_OFFSET + 1, 1);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_L_G1_OFT_OFFSET, 2);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_L_G2_OFT_OFFSET, 2);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_L_G3_OFT_OFFSET, 2);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_R_G1_OFT_OFFSET, 2);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_R_G2_OFT_OFFSET, 2);
-			tune_display(dev, tune_code_read_buf,
-					TSP_TUNE_CODE_R_G3_OFT_OFFSET, 2);
-			break;
+	case U0_M1_RAWDATA_TEST:
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_L_GOFT_OFFSET, 1);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_R_GOFT_OFFSET, 1);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_L_M1_OFT_OFFSET, 2);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_R_M1_OFT_OFFSET, 2);
+		break;
+	case U3_M2_RAWDATA_TEST:
+	case U0_M2_RAWDATA_TEST:
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_L_GOFT_OFFSET + 1, 1);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_R_GOFT_OFFSET + 1, 1);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_L_G1_OFT_OFFSET, 2);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_L_G2_OFT_OFFSET, 2);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_L_G3_OFT_OFFSET, 2);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_R_G1_OFT_OFFSET, 2);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_R_G2_OFT_OFFSET, 2);
+		tune_display(dev, tune_code_read_buf,
+			TSP_TUNE_CODE_R_G3_OFT_OFFSET, 2);
+		break;
 	}
 	write_file(dev, "\n", TIME_INFO_SKIP);
 
@@ -1180,21 +882,21 @@ static int prd_rawdata_test(struct device *dev, u8 type)
 	int write_test_mode_result = 0;
 
 	switch (type) {
-		case U3_M2_RAWDATA_TEST:
-			snprintf(test_type, sizeof(test_type),
-					"[U3_M2_RAWDATA_TEST]");
-			break;
-		case U0_M1_RAWDATA_TEST:
-			snprintf(test_type, sizeof(test_type),
-					"[U0_M1_RAWDATA_TEST]");
-			break;
-		case U0_M2_RAWDATA_TEST:
-			snprintf(test_type, sizeof(test_type),
-					"[U0_M2_RAWDATA_TEST]");
-			break;
-		default:
-			TOUCH_I("Test Type not defined\n");
-			return 1;
+	case U3_M2_RAWDATA_TEST:
+		snprintf(test_type, sizeof(test_type),
+				"[U3_M2_RAWDATA_TEST]");
+		break;
+	case U0_M1_RAWDATA_TEST:
+		snprintf(test_type, sizeof(test_type),
+				"[U0_M1_RAWDATA_TEST]");
+		break;
+	case U0_M2_RAWDATA_TEST:
+		snprintf(test_type, sizeof(test_type),
+				"[U0_M2_RAWDATA_TEST]");
+		break;
+	default:
+		TOUCH_I("Test Type not defined\n");
+		return 1;
 	}
 
 	/* Test Type Write */
@@ -1203,7 +905,7 @@ static int prd_rawdata_test(struct device *dev, u8 type)
 	write_test_mode_result = write_test_mode(dev, type);
 	if (write_test_mode_result == 0) {
 		TOUCH_E("production test couldn't be done\n");
-		return 2;
+		return 1;
 	}
 
 	prd_read_rawdata(dev, type);
@@ -1243,11 +945,11 @@ static void ic_run_info_print(struct device *dev)
 			rdata[2], rdata[3]);
 	ret += snprintf(buffer + ret, LOG_BUF_SIZE - ret,
 			"date : %04d.%02d.%02d %02d:%02d:%02d Site%d\n\n",
-			rdata[2] & 0xFFFF, (rdata[2] >> 16 & 0xFF),
-			(rdata[2] >> 24 & 0xFF), rdata[3] & 0xFF,
-			(rdata[3] >> 8 & 0xFF),
-			(rdata[3] >> 16 & 0xFF),
-			(rdata[3] >> 24 & 0xFF));
+		rdata[2] & 0xFFFF, (rdata[2] >> 16 & 0xFF),
+		(rdata[2] >> 24 & 0xFF), rdata[3] & 0xFF,
+		(rdata[3] >> 8 & 0xFF),
+		(rdata[3] >> 16 & 0xFF),
+		(rdata[3] >> 24 & 0xFF));
 
 	write_file(dev, buffer, TIME_INFO_SKIP);
 }
@@ -1267,12 +969,12 @@ static void firmware_version_log(struct device *dev)
 			"======== Firmware Info ========\n");
 	if (d->ic_info.version.build) {
 		ret += snprintf(buffer + ret, LOG_BUF_SIZE - ret,
-				"version : v%d.%02d.%d\n",
-				d->ic_info.version.major, d->ic_info.version.minor, d->ic_info.version.build);
+			"version : v%d.%02d.%d\n",
+			d->ic_info.version.major, d->ic_info.version.minor, d->ic_info.version.build);
 	} else {
 		ret += snprintf(buffer + ret, LOG_BUF_SIZE - ret,
-				"version : v%d.%02d\n",
-				d->ic_info.version.major, d->ic_info.version.minor);
+			"version : v%d.%02d\n",
+			d->ic_info.version.major, d->ic_info.version.minor);
 	}
 	ret += snprintf(buffer + ret, LOG_BUF_SIZE - ret,
 			"revision : %d\n", d->ic_info.revision);
@@ -1309,22 +1011,22 @@ static int ic_exception_check(struct device *dev, char *buf)
 
 			if (d->fw.version[0] != 1) {
 				ret += snprintf(buf + ret, PAGE_SIZE - ret,
-						"version[v%d.%02d] : Fail\n",
-						d->fw.version[0], d->fw.version[1]);
+					"version[v%d.%02d] : Fail\n",
+					d->fw.version[0], d->fw.version[1]);
 			} else {
 				ret += snprintf(buf + ret, PAGE_SIZE - ret,
-						"version[v%d.%02d] : Pass\n",
-						d->fw.version[0], d->fw.version[1]);
+					"version[v%d.%02d] : Pass\n",
+					d->fw.version[0], d->fw.version[1]);
 			}
 
 			if (d->fw.revision < 2 || d->fw.revision > 3) {
 				ret += snprintf(buf + ret, PAGE_SIZE - ret,
-						"revision[%d] : Fail\n",
-						d->fw.revision);
+					"revision[%d] : Fail\n",
+					d->fw.revision);
 			} else {
 				ret += snprintf(buf + ret, PAGE_SIZE - ret,
-						"revision[%d] : Pass\n",
-						d->fw.revision);
+					"revision[%d] : Pass\n",
+					d->fw.revision);
 			}
 			write_file(dev, buf, TIME_INFO_SKIP);
 
@@ -1360,33 +1062,25 @@ static ssize_t store_block_prd(struct device *dev,
 
 static ssize_t show_sd(struct device *dev, char *buf)
 {
+
 	struct touch_core_data *ts = to_touch_core(dev);
 	struct lg4895_data *d = to_lg4895_data(dev);
 	int openshort_ret = 0;
-	int jitter_ret = 0;
 	int rawdata_ret = 0;
 	u32 test_mode_ctrl_cmd = 0;
 	u32 test_mode_ctrl_cmd_chk = -1;
 	int ret = 0;
-	int i = 0;
-	int max[2] = {0, };
-	int const boot_mode = atomic_read(&ts->state.mfts);
-	int const fpcb_version_otp = lge_get_lg4895_revision();
-	int fpcb_ret = 0;
-	int revision_lot_ret = 0;
-	//int find_max=0, find_time=0;
-
-	TOUCH_I("%s boot_mode : %d\n", TS_MODULE, boot_mode);
 
 	/* file create , time log */
 	write_file(dev, "\nShow_sd Test Start", TIME_INFO_SKIP);
 	write_file(dev, "\n", TIME_INFO_WRITE);
 	TOUCH_I("Show_sd Test Start\n");
 
+
 	/* LCD mode check */
 	if (d->lcd_mode != LCD_MODE_U3) {
 		ret = snprintf(buf + ret, PAGE_SIZE - ret,
-				"LCD mode is not U3. Test Result : Fail\n");
+			"LCD mode is not U3. Test Result : Fail\n");
 		TOUCH_I("LCD mode is not U3. Test Result : Fail\n");
 		write_file(dev, buf, TIME_INFO_SKIP);
 		write_file(dev, "Show_sd Test End\n", TIME_INFO_WRITE);
@@ -1402,7 +1096,6 @@ static ssize_t show_sd(struct device *dev, char *buf)
 	ic_run_info_print(dev);
 
 	mutex_lock(&ts->lock);
-
 	test_mode_ctrl_cmd = cmd_test_enter;
 	lg4895_reg_write(dev, tc_test_mode_ctl,
 			(u32 *)&test_mode_ctrl_cmd,
@@ -1417,65 +1110,30 @@ static ssize_t show_sd(struct device *dev, char *buf)
 
 	lg4895_tc_driving(dev, LCD_MODE_STOP);
 
-	/* Revision check for h/w revision for fpcb */
-	/* 1,2 : not re-work, after 3 : re-worked*/
-
-	if ( fpcb_version_otp > 2 && d->ic_info.fpc == 0x2 ) {
-		TOUCH_I("The sample is fixed by fpcb[%d][%d]\n", fpcb_version_otp, d->ic_info.fpc);
-		write_file(dev, "The sample is fixed by fpcb\n\n",
-			TIME_INFO_SKIP);
-	} else {
-		TOUCH_I("The sample is not fixed by fpcb[%d][%d]\n", fpcb_version_otp, d->ic_info.fpc);
-		write_file(dev, "The sample is not fixed by fpcb\n\n",
-			TIME_INFO_SKIP);
-		fpcb_ret = 1;
-	}
-
-	/* revison check for h/w revision for siw */
-	/* OxFF : not PT sample */
-	if ( d->ic_info.revision == 0xFF || ((d->ic_info.lot[2] & 0xFFFF) == 0xFFF)) {
-		TOUCH_I("The sample do not production test[%X][%X]\n", d->ic_info.revision, (d->ic_info.lot[2]&0xFFFF));
-		write_file(dev, "The sample do not production test\n\n",
-			TIME_INFO_SKIP);
-		revision_lot_ret = 1;
-	}
-
-	if ( fpcb_ret || revision_lot_ret )
-		goto finish;
 	/*
-	   DOZE1_M2_RAWDATA_TEST
-	   rawdata - pass : 0, fail : 1
-	   rawdata tunecode - pass : 0, fail : 2
-	 */
+		DOZE1_M2_RAWDATA_TEST
+		rawdata - pass : 0, fail : 1
+		rawdata tunecode - pass : 0, fail : 2
+	*/
 	rawdata_ret = prd_rawdata_test(dev, U3_M2_RAWDATA_TEST);
-
 	/*
-	   DOZE1_M2_JITTER_TEST
-	   jitterdata - pass : 0, fail : 1
-	   jitterdata - no_global_tuen : 1, no_local_tuen : 2
-	 */
-
-	jitter_ret = prd_jitter_test(dev, JITTER_TEST, max);
-
-	/*
-	   OPEN_SHORT_ALL_TEST
-	   open - pass : 0, fail : 1
-	   short - pass : 0, fail : 2
-	 */
+		OPEN_SHORT_ALL_TEST
+		open - pass : 0, fail : 1
+		short - pass : 0, fail : 2
+	*/
 	openshort_ret = prd_open_short_test(dev);
 
 	ret = snprintf(buf, PAGE_SIZE,
 			"\n========RESULT=======\n");
 	TOUCH_I("========RESULT=======\n");
-
-	if ( rawdata_ret || jitter_ret ) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"Raw Data : Fail[%d][%d]\n", rawdata_ret, jitter_ret?1:0);
-		TOUCH_I("Raw Data : Fail[%d][%d]\n", rawdata_ret, jitter_ret?1:0);
-	} else {
+	if (rawdata_ret == 0) {
 		ret += snprintf(buf + ret, PAGE_SIZE - ret,
 				"Raw Data : Pass\n");
 		TOUCH_I("Raw Data : Pass\n");
+	} else {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret,
+				"Raw Data : Fail\n");
+		TOUCH_I("Raw Data : Fail\n");
 	}
 
 	if (openshort_ret == 0) {
@@ -1484,68 +1142,15 @@ static ssize_t show_sd(struct device *dev, char *buf)
 		TOUCH_I("Channel Status : Pass\n");
 	} else {
 		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"Channel Status : Fail (%d/%d)\n",
-				((openshort_ret & 0x1) == 0x1) ? 0 : 1,
-				((openshort_ret & 0x2) == 0x2) ? 0 : 1);
+			"Channel Status : Fail (%d/%d)\n",
+			((openshort_ret & 0x1) == 0x1) ? 0 : 1,
+			((openshort_ret & 0x2) == 0x2) ? 0 : 1);
 		TOUCH_I("Channel Status : Fail (%d/%d)\n",
-				((openshort_ret & 0x1) == 0x1) ? 0 : 1,
-				((openshort_ret & 0x2) == 0x2) ? 0 : 1);
+			((openshort_ret & 0x1) == 0x1) ? 0 : 1,
+			((openshort_ret & 0x2) == 0x2) ? 0 : 1);
 	}
-	/* Jitter Test result */
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"BLU Jitter Spec : %d\n", ts->jitter_spec);
-	TOUCH_I("BLU Jitter Spec : %d\n", ts->jitter_spec);
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"BLU Jitter Avg Spec : %d\n", ts->jitter_avg_spec);
-	TOUCH_I("BLU Jitter Avg Spec : %d\n", ts->jitter_avg_spec);
-	if (0 == jitter_ret) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"Jitter Result : Pass (%3d)(%3d)\n", *max, *(max+JITTER_AVG_VA));
-		TOUCH_I("Jitter Result : Pass (%3d)(%3d)\n", *max, *(max+JITTER_AVG_VA));
-	} else {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"Jitter Result : Fail (%3d)(%3d)\n", *max, *(max+JITTER_AVG_VA));
-		TOUCH_I("Jitter Result : Fail (%3d)(%3d)\n", *max, *(max+JITTER_AVG_VA));
-	}
-	for ( i=0; i<JITTER_TEST_CNT; i++) {
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"%2dtrial : %d\n", i+1,
-				GET_MAX(0, jitter_max_value[i][EVEN*2], jitter_max_value[i][ODD*2]));
-		TOUCH_I("%2dtrial : [E/m]:%3d [E/av]:%3d [O/m]:%3d [O/av]%3d\n", i+1,
-				jitter_max_value[i][EVEN*2], jitter_max_value[i][EVEN*2+JITTER_AVG_VA],
-				jitter_max_value[i][ODD*2], jitter_max_value[i][ODD*2+JITTER_AVG_VA]);
-	}
-#if 0
-	/* rank funtion for find max times */
-	find_max = find_time = 0;
-	for ( i=0; i<JITTER_TEST_CNT; i++) {
-		if ( find_max < GET_MAX(jitter_max_value[i][EVEN*2], jitter_max_value[i][ODD*2], find_max)) {
-			find_max = GET_MAX(jitter_max_value[i][EVEN*2], jitter_max_value[i][ODD*2], find_max);
-			find_time = i+1;
-		}
-	}
-	ret += snprintf(buf + ret, PAGE_SIZE - ret,
-			"BLU find max times : %d\n", find_time);
-	TOUCH_I("BLU find max times : %d\n", find_time);
-#endif //1
-finish:
-	if ( fpcb_ret || revision_lot_ret ) {
-		ret = snprintf(buf, PAGE_SIZE,
-			"\n========RESULT=======\n");
-		TOUCH_I("========RESULT=======\n");
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"Raw Data : Fail[%s%s]\n",
-				fpcb_ret?"not re-worked":"",
-				revision_lot_ret?", PT Failed":"");
-		TOUCH_I("Raw Data : Fail[%s%s]\n",
-			fpcb_ret?"not re-worked":"",
-			revision_lot_ret?", PT Failed":"");
-		ret += snprintf(buf + ret, PAGE_SIZE - ret,
-				"Channel Status : N/A\n");
-		TOUCH_I("Channel Status : N/A\n");
-	}
-
 	TOUCH_I("=====================\n");
+
 	write_file(dev, buf, TIME_INFO_SKIP);
 
 	ts->driver->power(dev, POWER_OFF);
@@ -1571,6 +1176,26 @@ finish:
 	return ret;
 }
 
+static int read_memory(struct device *dev, u16 w_addr,
+	u32 w_data, u16 w_size, u16 r_addr, u8 *r_buff, u32 r_size)
+{
+        u16 nToRead = r_size;
+
+        // if( nToRead > 4 )
+                // nRead = 4;
+        // else
+                // nRead = nToRead;
+        if(lg4895_reg_write( dev , w_addr , &w_data, sizeof(u32))<0){
+                TOUCH_E("reg addr 0x%x ReadMemory->write fail\n", w_addr);
+                return -1;
+        }
+
+        if(lg4895_reg_read(dev , r_addr , r_buff , nToRead)<0){
+                TOUCH_E("reg addr 0x%x ReadMemory->read fail\n", r_addr);
+                return -1;
+        }
+        return 1;
+}
 static int stop_firmware(struct device *dev, u32 wdata)
 {
 	u32 read_val;
@@ -1581,9 +1206,9 @@ static int stop_firmware(struct device *dev, u32 wdata)
 	/* STOP F/W to check */
 	lg4895_reg_write(dev, ADDR_CMD_REG_SIC_IMAGECTRL_TYPE, &wdata, sizeof(u32));
 	lg4895_reg_read(dev, ADDR_CMD_REG_SIC_IMAGECTRL_TYPE, &check_data,
-			sizeof(u32));
+		sizeof(u32));
 	lg4895_reg_read(dev, ADDR_CMD_REG_SIC_IMAGECTRL_TYPE, &check_data,
-			sizeof(u32));
+		sizeof(u32));
 
 	try_cnt = 1000;
 	do
@@ -1595,9 +1220,9 @@ static int stop_firmware(struct device *dev, u32 wdata)
 			goto error;
 		}
 		lg4895_reg_read(dev, ADDR_CMD_REG_SIC_GETTER_READYSTATUS,
-				&read_val, sizeof(u32));
+			&read_val, sizeof(u32));
 		TOUCH_I("read_val = [%x] , RS_IMAGE = [%x]\n",read_val,
-				(u32)RS_IMAGE);
+			(u32)RS_IMAGE);
 		touch_msleep(10);
 	} while(read_val != (u32)RS_IMAGE);
 
@@ -1607,16 +1232,17 @@ error:
 
 static void start_firmware(struct device *dev)
 {
-	u32 const cmd = IT_NONE;
+	u32 cmd = 0;
 	u32 check_data = 0;
 
 	/* Release F/W to operate */
-	lg4895_reg_write(dev,ADDR_CMD_REG_SIC_IMAGECTRL_TYPE, (void *)&cmd,
-			sizeof(u32));
+	cmd = (u32)IT_NONE;
+	lg4895_reg_write(dev,ADDR_CMD_REG_SIC_IMAGECTRL_TYPE,&cmd,
+		sizeof(u32));
 	lg4895_reg_read(dev, ADDR_CMD_REG_SIC_IMAGECTRL_TYPE, &check_data,
-			sizeof(u32));
+		sizeof(u32));
 	lg4895_reg_read(dev, ADDR_CMD_REG_SIC_IMAGECTRL_TYPE, &check_data,
-			sizeof(u32));
+		sizeof(u32));
 	TOUCH_I("check_data : %x\n", check_data);
 }
 
@@ -1625,19 +1251,54 @@ static ssize_t get_data(struct device *dev, int16_t *buf, u32 wdata)
 	int i;
 	int ret = 0;
 	int r, c = 0;
+	u32 data_offset = 0;
+	u32 rdata = 1;
+	int retry = 500;
+	u32 testmode = 0;
+	int __frame_size = ROW_SIZE*COL_SIZE*RAWDATA_SIZE;
+	struct touch_core_data *ts = to_touch_core(dev);
 
-	TOUCH_I("======== get data ========\n");
+	TOUCH_I("======== get data ========\n");	
 	TOUCH_I("wdata = %d\n", wdata);
-	if( CMD_DELTADATA == wdata ) {
+	if( CMD_RAWDATA == wdata ) {
+		testmode = 0x0305;
+		lg4895_reg_write(dev, tc_tsp_test_ctl, (u8 *)&testmode, sizeof(u32));
+		touch_msleep(400);
+		do {
+			TOUCH_I("retry = %d\n", retry);
+			if (retry != 0)
+				touch_msleep(100);
+			lg4895_reg_read(dev, tc_tsp_test_sts,
+					(u8 *)&rdata, sizeof(rdata));
+
+		} while ((rdata != 0xAA) && retry--);
+		if (retry == 0) {
+			TOUCH_E("== get data time out! ==\n");
+			goto error;
+		}
+		if (__frame_size % 4)
+			__frame_size = (((__frame_size >> 2) + 1) << 2);
+		data_offset = RAWDATA_OFFSET;
+		lg4895_reg_write(dev, tc_tsp_test_data_offset,
+			(u8 *)&data_offset, sizeof(u32));
+		lg4895_reg_read(dev, tc_tsp_data_access_addr,
+			(u8 *)buf, __frame_size);
+		ts->driver->power(dev, POWER_OFF);
+		ts->driver->power(dev, POWER_ON);
+		touch_msleep(90);
+		ts->driver->init(dev);
+		return ret;
+	}
+	else if( CMD_DELTADATA == wdata ) {
 		int16_t *delta_buf = NULL;
 		delta_buf = kzalloc(sizeof(int16_t) *
-				((COL_SIZE+2) * (ROW_SIZE+2)), GFP_KERNEL);
+			((COL_SIZE+2) * (ROW_SIZE+2)), GFP_KERNEL);
 		if ( stop_firmware(dev, IT_DELTA_IMAGE) )
 			goto error_delta;
 		if (read_memory(dev, SERIAL_DATA_OFFSET,
-					DATA_SRAM_DELTA_BASE_ADDR, sizeof(u32),
-					DATA_I2CBASE_ADDR, (u8 *)delta_buf,
-					(ROW_SIZE+2)*(COL_SIZE+2)*2) < 0) {
+			DATA_SRAM_DELTA_BASE_ADDR, sizeof(u32),
+			DATA_I2CBASE_ADDR, (u8 *)delta_buf,
+			(ROW_SIZE+2)*(COL_SIZE+2)*2) < 0) {
 			TOUCH_E("read memory error!!\n");
 			ret = 1;
 			goto error_delta;
@@ -1646,7 +1307,7 @@ static ssize_t get_data(struct device *dev, int16_t *buf, u32 wdata)
 				r = i/COL_SIZE;
 				c = i%COL_SIZE;
 				buf[i] =
-					delta_buf[(r+1)*(COL_SIZE+2)+(c+1)];
+				delta_buf[(r+1)*(COL_SIZE+2)+(c+1)];
 			}
 			TOUCH_I("read_memory ok\n");
 		}
@@ -1661,8 +1322,8 @@ error_delta:
 		if ( stop_firmware(dev, IT_LABEL_IMAGE) )
 			goto error_label;
 		if (read_memory(dev, SERIAL_DATA_OFFSET, DATA_LABLE_BASE_ADDR, sizeof(u32),
-					DATA_I2CBASE_ADDR, (u8 *)label_buf,
-					sizeof(u8)*(ROW_SIZE+2)*(COL_SIZE+2)) < 0) {
+				DATA_I2CBASE_ADDR, (u8 *)label_buf,
+				sizeof(u8)*(ROW_SIZE+2)*(COL_SIZE+2)) < 0) {
 			TOUCH_E("read memory error!!\n");
 			ret = 1;
 			goto error_label;
@@ -1683,7 +1344,7 @@ error_label:
 		if ( stop_firmware(dev, IT_BASELINE_IMAGE) )
 			goto error_base;
 		if (read_memory(dev, SERIAL_DATA_OFFSET, DATA_BASE_ADDR, sizeof(u32),
-					DATA_I2CBASE_ADDR, (u8 *)buf, sizeof(u8)*(ROW_SIZE)*(COL_SIZE)*2) < 0) {
+				DATA_I2CBASE_ADDR, (u8 *)buf, sizeof(u8)*(ROW_SIZE)*(COL_SIZE)*2) < 0) {
 			TOUCH_E("read memory error!!\n");
 			ret = 1;
 			goto error_base;
@@ -1691,12 +1352,11 @@ error_label:
 error_base:
 		start_firmware(dev);
 		return ret;
-	} else if( CMD_RAWDATA == wdata ||
-			CMD_ALGORITHM == wdata ) { /* with algorithm */
+	} else if( CMD_ALGORITHM == wdata ) { /* with algorithm */
 		if ( stop_firmware(dev, IT_ALGORITHM_RAW_IMAGE) )
 			goto error_raw_algorithm;
 		if (read_memory(dev, SERIAL_DATA_OFFSET, DATA_RAWSIW_BASE_ADDR, sizeof(u32),
-					DATA_I2CBASE_ADDR, (u8 *)buf, sizeof(u8)*(ROW_SIZE)*(COL_SIZE)*2) < 0) {
+				DATA_I2CBASE_ADDR, (u8 *)buf, sizeof(u8)*(ROW_SIZE)*(COL_SIZE)*2) < 0) {
 			TOUCH_E("read memory error!!\n");
 			ret = 1;
 			goto error_raw_algorithm;
@@ -1706,8 +1366,8 @@ error_raw_algorithm:
 		return ret;
 	}
 	else if( CMD_TCMDATA == wdata ){
-		u8 const tcm_col = COL_SIZE/2;
-		u16 const read_addr = 0x303;
+		const u8 tcm_col = COL_SIZE/2;
+		const u16 read_addr = 0x303;
 		u8 tc_mem_sel_value = 0;
 		u8 cmd = 0;
 		if (lg4895_reg_write(dev, 0x007C, &cmd, sizeof(u32)) < 0)
@@ -1723,6 +1383,8 @@ error_raw_algorithm:
 error_tcm:
 		return ret;
 	}
+
+error:
 	return 1;
 }
 
@@ -1849,7 +1511,7 @@ static ssize_t show_labeldata(struct device *dev, char *buf)
 	int ret = 0;
 	void *data = NULL;
 
-	data = kzalloc(sizeof(u16) * ((COL_SIZE+2) * (ROW_SIZE+2)), GFP_KERNEL);
+	data = kzalloc(sizeof(u8) * ((COL_SIZE+2) * (ROW_SIZE+2)), GFP_KERNEL);
 
 	if ( NULL == data ) {
 		TOUCH_E("mem_error\n");
@@ -1938,9 +1600,6 @@ static ssize_t show_lpwg_sd(struct device *dev, char *buf)
 	int m2_rawdata_ret = 0;
 	int ret = 0;
 	u32 test_mode_ctrl_cmd = 0;
-	int try_cnt = 3;
-	u32 dummy0 = 0;
-	int do_retry = 0;
 
 	/* file create , time log */
 	write_file(dev, "\nShow_lpwg_sd Test Start", TIME_INFO_SKIP);
@@ -1961,63 +1620,50 @@ static ssize_t show_lpwg_sd(struct device *dev, char *buf)
 	ic_run_info_print(dev);
 
 	mutex_lock(&ts->lock);
-	do {
-		do_retry = 0;
-		test_mode_ctrl_cmd = cmd_test_enter;
-		lg4895_reg_write(dev, tc_test_mode_ctl,
-				(u32 *)&test_mode_ctrl_cmd,
-				sizeof(u32));
-		touch_msleep(30);
-		TOUCH_I("write tc_test_mode_ctl= %x\n", cmd_test_enter);
-		touch_interrupt_control(ts->dev, INTERRUPT_DISABLE);
+	test_mode_ctrl_cmd = cmd_test_enter;
+	lg4895_reg_write(dev, tc_test_mode_ctl,
+			(u32 *)&test_mode_ctrl_cmd,
+			sizeof(u32));
+	touch_msleep(30);
+	TOUCH_I("write tc_test_mode_ctl= %x\n", cmd_test_enter);
+	touch_interrupt_control(ts->dev, INTERRUPT_DISABLE);
 
-		lg4895_tc_driving(dev, LCD_MODE_STOP);
+	lg4895_tc_driving(dev, LCD_MODE_STOP);
 
-		m2_rawdata_ret = prd_rawdata_test(dev, U0_M2_RAWDATA_TEST);
-		m1_rawdata_ret = prd_rawdata_test(dev, U0_M1_RAWDATA_TEST);
+	m2_rawdata_ret = prd_rawdata_test(dev, U0_M2_RAWDATA_TEST);
+	m1_rawdata_ret = prd_rawdata_test(dev, U0_M1_RAWDATA_TEST);
 
-		if (m2_rawdata_ret == 2 || m1_rawdata_ret == 2)
-			do_retry = 1;
+	m2_rawdata_ret = m1_rawdata_ret = 0;
 
-		lg4895_reg_read(dev, tc_status, (u32 *)&dummy0, sizeof(u32));
-		TOUCH_I("tc_status= %x\n", dummy0);
+	ret = snprintf(buf, PAGE_SIZE, "========RESULT=======\n");
+	TOUCH_I("========RESULT=======\n");
 
-		ret = snprintf(buf, PAGE_SIZE, "========RESULT=======\n");
-		TOUCH_I("========RESULT=======\n");
+	if (!m1_rawdata_ret && !m2_rawdata_ret) {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret,
+				"LPWG RawData : %s\n", "Pass");
+		TOUCH_I("LPWG RawData : %s\n", "Pass");
+	} else {
+		ret += snprintf(buf + ret, PAGE_SIZE - ret,
+				"LPWG RawData : %s (%d/%d)\n", "Fail",
+				m1_rawdata_ret ? 0 : 1, m2_rawdata_ret ? 0 : 1);
+		TOUCH_I("LPWG RawData : %s (%d/%d)\n", "Fail",
+				m1_rawdata_ret ? 0 : 1, m2_rawdata_ret ? 0 : 1);
+	}
+	TOUCH_I("=====================\n");
 
-		if (!m1_rawdata_ret && !m2_rawdata_ret) {
-			ret += snprintf(buf + ret, PAGE_SIZE - ret,
-					"LPWG RawData : %s\n", "Pass");
-			TOUCH_I("LPWG RawData : %s\n", "Pass");
-		} else {
-			ret += snprintf(buf + ret, PAGE_SIZE - ret,
-					"LPWG RawData : %s (%d/%d)\n", "Fail",
-					m1_rawdata_ret ? 0 : 1, m2_rawdata_ret ? 0 : 1);
-			TOUCH_I("LPWG RawData : %s (%d/%d)\n", "Fail",
-					m1_rawdata_ret ? 0 : 1, m2_rawdata_ret ? 0 : 1);
-		}
-		TOUCH_I("=====================\n");
+	write_file(dev, buf, TIME_INFO_SKIP);
 
-		write_file(dev, buf, TIME_INFO_SKIP);
-
-		ts->driver->power(dev, POWER_OFF);
-		ts->driver->power(dev, POWER_ON);
-		touch_msleep(90);
-		ts->driver->init(dev);
-		touch_interrupt_control(ts->dev, INTERRUPT_ENABLE);
-		test_mode_ctrl_cmd = cmd_test_exit;
-		lg4895_reg_write(dev, tc_test_mode_ctl,
-				(u32 *)&test_mode_ctrl_cmd,
-				sizeof(u32));
-		touch_msleep(30);
-		TOUCH_I("write tc_test_mode_ctl= %x\n", cmd_test_exit);
-
-		if (--try_cnt == 0) {
-			TOUCH_E("lpwg_sd->try_cnt == 0\n");
-			break;
-		}
-	} while(!(dummy0 & (1 << 29)) || (do_retry == 1));
-
+	ts->driver->power(dev, POWER_OFF);
+	ts->driver->power(dev, POWER_ON);
+	touch_msleep(90);
+	ts->driver->init(dev);
+	touch_interrupt_control(ts->dev, INTERRUPT_ENABLE);
+	test_mode_ctrl_cmd = cmd_test_exit;
+	lg4895_reg_write(dev, tc_test_mode_ctl,
+			(u32 *)&test_mode_ctrl_cmd,
+			sizeof(u32));
+	touch_msleep(30);
+	TOUCH_I("write tc_test_mode_ctl= %x\n", cmd_test_exit);
 	mutex_unlock(&ts->lock);
 
 	write_file(dev, "Show_lpwg_sd Test End\n", TIME_INFO_WRITE);

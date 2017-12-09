@@ -44,6 +44,12 @@
 #define CHG_TYPE_STATUS_MASK    (BIT(3)|BIT(2)|BIT(1)|BIT(0))
 #define DCD_TIMEOUT_MASK		BIT(7)
 
+#define NULL_CHECK_VOID(p)  \
+			if (!(p)) { \
+				pr_err("FATAL (%s)\n", __func__); \
+				return ; \
+			}
+
 #define NULL_CHECK(p, err)  \
 			if (!(p)) { \
 				pr_err("FATAL (%s)\n", __func__); \
@@ -242,13 +248,13 @@ static void max14656_irq_worker(struct work_struct *work)
 
 	if ((reg_address[REG_03] & VB_VALID_STATUS_MASK) &&
 			(reg_address[REG_03] & CHG_TYPE_STATUS_MASK)) {
-		chip->chg_detect_done = 1;
 		chip->chg_type = max14656_get_chg_type_status(chip);
-		max14656_charger_type = max14656_get_chg_type_status(chip);
+		max14656_charger_type = chip->chg_type;
+		chip->chg_detect_done = 1;
 	} else {
-		chip->chg_detect_done = 0;
 		chip->chg_type = 0;
 		max14656_charger_type = 0;
+		chip->chg_detect_done = 0;
 	}
 	pr_err("%s max14656_chg_detect_done = %d\n", __func__, chip->chg_detect_done);
 
@@ -266,10 +272,34 @@ static irqreturn_t max14656_irq(int irq, void *dev_id)
 	struct max14656_chip *chip = dev_id;
 
 	NULL_CHECK(chip, IRQ_NONE);
+	wake_lock(&chip->max14656_irq_wake_lock);
+#ifdef I2C_SUSPEND_WORKAROUND
+	schedule_delayed_work(&chip->check_suspended_work,
+										msecs_to_jiffies(100));
+#else
 	schedule_delayed_work(&chip->irq_work, msecs_to_jiffies(100));
+#endif
 
 	return IRQ_HANDLED;
 }
+
+#ifdef I2C_SUSPEND_WORKAROUND
+static void max14656_check_suspended_worker(struct work_struct *work)
+{
+	struct max14656_chip *chip =
+		container_of(work, struct max14656_chip, check_suspended_work.work);
+	NULL_CHECK_VOID(chip);
+
+	if (chip->suspend) {
+		pr_debug("max14656 suspended. try i2c operation after 100ms.\n");
+		schedule_delayed_work(&chip->check_suspended_work, msecs_to_jiffies(100));
+	} else {
+		pr_debug("max14656 resumed. do max14656_irq.\n");
+		schedule_delayed_work(&chip->irq_work, 0);
+	}
+	wake_unlock(&chip->max14656_irq_wake_lock);
+}
+#endif
 
 static int max14656_hw_init(struct max14656_chip *chip)
 {
@@ -287,13 +317,13 @@ static int max14656_hw_init(struct max14656_chip *chip)
 		pr_err("failed to set MAX14656_INTMASK_1 ret=%d\n", ret);
 		return ret;
 	}
-
+#if defined(CONFIG_LGE_PM_FLOATED_CHARGER)
 	ret =max14656_set_prop_chg_type_manual(chip, 1);
 	if (ret) {
 		pr_err("failed to set MAX14656_CONTROL_3 ret=%d\n", ret);
 		return ret;
         }
-
+#endif
 	return ret;
 }
 
@@ -320,9 +350,11 @@ static int max14656_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_USB_DCD_TIMEOUT:
 		val->intval = chip->dcd_timeout;
 		break;
+#if defined(CONFIG_LGE_PM_FLOATED_CHARGER)
 	case POWER_SUPPLY_PROP_USB_CHG_TYPE_MANUAL:
 		val->intval = max14656_get_prop_chg_type_manual(chip);
 		break;
+#endif
 	default:
 		return -EINVAL;
 	}
@@ -456,8 +488,8 @@ static int __devinit max14656_probe(struct i2c_client *client, const struct i2c_
 	}
 	chip->irq = gpio_to_irq(chip->int_gpio);
 	pr_debug("int_gpio irq#=%d.\n", chip->irq);
-	
-	i2c_set_clientdata(client, NULL);
+
+	i2c_set_clientdata(client, chip);
 
 	ret = max14656_hw_init(chip);
 	if (ret) {
@@ -465,7 +497,13 @@ static int __devinit max14656_probe(struct i2c_client *client, const struct i2c_
 		goto err_hw_init;
 	}
 
+	wake_lock_init(&chip->max14656_irq_wake_lock,
+						WAKE_LOCK_SUSPEND, "max14656_irq wake_lock");
 	INIT_DELAYED_WORK(&chip->irq_work, max14656_irq_worker);
+#ifdef I2C_SUSPEND_WORKAROUND
+	INIT_DELAYED_WORK(&chip->check_suspended_work,
+						max14656_check_suspended_worker);
+#endif
 
 	if (chip->irq) {
 		ret = request_irq(chip->irq, max14656_irq,
@@ -485,13 +523,16 @@ static int __devinit max14656_probe(struct i2c_client *client, const struct i2c_
 
 	rc = power_supply_register(&chip->client->dev, &chip->detect_psy);
 	if (rc < 0) {
-			pr_err("[2222]batt failed to register rc = %d\n", rc);
+		pr_err("[2222]batt failed to register rc = %d\n", rc);
+		goto err_init_detect_psy;
 	}
 #endif
 
 	pr_info("%s : Done\n", __func__);
 	return 0;
-
+	
+err_init_detect_psy:
+	wake_lock_destroy(&chip->max14656_irq_wake_lock);
 err_req_irq:
 err_hw_init:
 	if (chip->int_gpio)
@@ -507,9 +548,10 @@ static int max14656_remove(struct i2c_client *client)
 {
 	struct max14656_chip *chip = i2c_get_clientdata(client);
 
-#ifdef CONFIG_LGE_PM        
-        power_supply_unregister(&chip->detect_psy);
+#ifdef CONFIG_LGE_PM
+	power_supply_unregister(&chip->detect_psy);
 #endif
+	wake_lock_destroy(&chip->max14656_irq_wake_lock);
 
 	if (chip->irq)
 		free_irq(chip->irq, chip);
@@ -521,6 +563,25 @@ static int max14656_remove(struct i2c_client *client)
 	return 0;
 }
 
+#ifdef CONFIG_LGE_PM
+static int max14656_resume(struct i2c_client *client)
+{
+	struct max14656_chip *chip = i2c_get_clientdata(client);
+	NULL_CHECK(chip, -EINVAL);
+	chip->suspend = false;
+
+	return 0;
+}
+
+static int max14656_suspend(struct i2c_client *client, pm_message_t mesg)
+{
+	struct max14656_chip *chip = i2c_get_clientdata(client);
+	NULL_CHECK(chip, -EINVAL);
+	chip->suspend = true;
+
+	return 0;
+}
+#endif
 static const struct i2c_device_id max14656_id[] = {
 	{"max14656", 0},
 	{}
@@ -539,6 +600,10 @@ static struct i2c_driver max14656_i2c_driver = {
 	},
 	.probe      = max14656_probe,
 	.remove		= max14656_remove,
+#ifdef CONFIG_LGE_PM
+	.resume     = max14656_resume,
+	.suspend    = max14656_suspend,
+#endif
 	.id_table   = max14656_id,
 };
 

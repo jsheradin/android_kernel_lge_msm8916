@@ -177,3 +177,4 @@ obj-$(CONFIG_MFD_RETU)		+= retu-mfd.o
 obj-$(CONFIG_MFD_AS3711)	+= as3711.o
 obj-$(CONFIG_MFD_DW8768)	+= dw8768.o
 obj-$(CONFIG_MFD_P1_DSV)	+= p1_dsv.o
+obj-$(CONFIG_MFD_SM5107)	+= sm5107.o

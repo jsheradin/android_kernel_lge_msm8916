@@ -143,6 +143,9 @@ int ts_charger_plug = 0;
 
 int is_probed = 0;
 int power_block = 0;
+#if defined(CONFIG_TOUCHSCREEN_MELFAS_MIT300_P1S_SD)
+int p1s_c = 0;
+#endif
 
 extern bool wakeup_by_swipe_mit300;
 extern int lockscreen_stat_mit300;
@@ -2297,7 +2300,7 @@ static ssize_t fw_upgrade_store(struct lge_touch_data *ts, const char *buf, size
 		return count;
 	}
 
-	sscanf(buf, "%127s", ts->fw_info.path);
+	sscanf(buf, "%s", ts->fw_info.path);
 
 	while (ts->fw_info.is_downloading);
 
@@ -2453,7 +2456,7 @@ static ssize_t openshort_store(struct lge_touch_data *ts, const char *buf, size_
 	}
 
 	if (ts->pdata->panel_on == POWER_ON || ts->pdata->panel_on == POWER_WAKE) {
-		if (sscanf(buf, "%127s", cmd) != 1)
+		if (sscanf(buf, "%s", cmd) != 1)
 			return -EINVAL;
 
 		value = ts->pdata->check_openshort;
@@ -2495,7 +2498,7 @@ static ssize_t cm_delta_store(struct lge_touch_data *ts, const char *buf, size_t
 		return count;
 	}
 	if (ts->pdata->panel_on == POWER_ON || ts->pdata->panel_on == POWER_WAKE || ts->pdata->lpwg_debug_enable != 0) {
-		if (sscanf(buf, "%127s", cmd) != 1)
+		if (sscanf(buf, "%s", cmd) != 1)
 			return -EINVAL;
 
 		mutex_lock(&ts->thread_lock);
@@ -2532,7 +2535,7 @@ static ssize_t cm_jitter_store(struct lge_touch_data *ts, const char *buf, size_
 		return count;
 	}
 	if (ts->pdata->panel_on == POWER_ON || ts->pdata->panel_on == POWER_WAKE || ts->pdata->lpwg_debug_enable != 0) {
-		if (sscanf(buf, "%127s", cmd) != 1)
+		if (sscanf(buf, "%s", cmd) != 1)
 			return -EINVAL;
 
 		mutex_lock(&ts->thread_lock);
@@ -2570,7 +2573,7 @@ static ssize_t rawdata_store(struct lge_touch_data *ts, const char *buf, size_t 
 		return count;
 	}
 	if (ts->pdata->panel_on == POWER_ON || ts->pdata->panel_on == POWER_WAKE || ts->pdata->lpwg_debug_enable != 0) {
-		if (sscanf(buf, "%127s", cmd) != 1)
+		if (sscanf(buf, "%s", cmd) != 1)
 			return -EINVAL;
 
 		mutex_lock(&ts->thread_lock);
@@ -3229,6 +3232,11 @@ static int touch_probe(struct i2c_client *client, const struct i2c_device_id *id
 	if (ts_pdata->auto_fw_update && touch_drv->fw_upgrade) {
 		if (likely(touch_debug_mask_ & (DEBUG_FW_UPGRADE | DEBUG_BASE_INFO)))
 			TOUCH_INFO_MSG("Auto F/W upgrade \n");
+#if defined(CONFIG_TOUCHSCREEN_MELFAS_MIT300_P1S_SD)
+		if (p1s_c) {
+			strlcpy(ts_pdata->fw_image, "melfas/mit300/p1s_c/melfas_mip4.bin", NAME_BUFFER_SIZE);
+		}
+#endif
 		safety_reset(ts);
 		queue_work(touch_wq, &ts->work_fw_upgrade);
 

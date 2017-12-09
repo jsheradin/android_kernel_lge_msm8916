@@ -53,11 +53,6 @@ atomic_t	touch_irq_mask;
 ****************************************************************************/
 extern int touch_module;
 
-#if defined (CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-extern int get_display_id(void);
-int ph1_tddi_id;
-#endif
-
 
 /****************************************************************************
 * Local Function Prototypes
@@ -117,11 +112,6 @@ int TouchGetModuleIndex(void)
     #if defined(TOUCH_MODEL_LION_3G)
     index = touch_module;
     #endif
-	#if defined (CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-	index = get_display_id();	//read touch maker ID ( 0 : mit300, 1 : td4100)
-	TOUCH_LOG("Display Module Get. Module index = %d\n", get_display_id());
-	ph1_tddi_id = index;
-	#endif
 
     TOUCH_LOG("Touch Module Get. Module index = %d\n",index);
 	return index;

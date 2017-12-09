@@ -58,7 +58,7 @@
 
 #define TOUCH_IRQ_FLAGS (IRQF_ONESHOT)
 
-#elif defined(TOUCH_MODEL_YG) || defined(TOUCH_MODEL_C100N)
+#elif defined(TOUCH_MODEL_YG) || defined(TOUCH_MODEL_C100N) || defined(TOUCH_MODEL_M216N) || defined(TOUCH_MODEL_M216)
 
 #define TOUCH_I2C_BUS_NUM 			5
 

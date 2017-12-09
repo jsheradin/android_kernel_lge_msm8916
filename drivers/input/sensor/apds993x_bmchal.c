@@ -41,9 +41,15 @@
 #include <linux/syscalls.h>
 #include <linux/fs.h>
 #include <linux/uaccess.h>
+#include "lge_log.h"
 
 #define LGE_PROXIMITY_NAME	"lge_proximity"
 #define LGE_LIGHT_NAME	"lge_light"
+#define SENSOR_TAG	"[LGE_Proximity]"
+#ifdef APDS993X_ALS_SENSOR_INT
+#define ALS_LUX_THRESHOLD 4
+#define CH0DATA_THRESHOLD 0x03c0 
+#endif
 #define APDS993x_SENSOR_DEBUG 1
 #define CONFIG_APDS9930_DEBUG 1
 
@@ -920,6 +926,7 @@ static void apds993x_change_ps_threshold(struct i2c_client *client)
 	}
 }
 
+#if 0
 static void apds993x_change_als_threshold(struct i2c_client *client)
 {
 	struct apds993x_data *data = i2c_get_clientdata(client);
@@ -1045,6 +1052,7 @@ static void apds993x_change_als_threshold(struct i2c_client *client)
 			CMD_WORD|APDS993X_AIHTL_REG, data->als_threshold_h);
 
 }
+#endif
 
 static void apds993x_reschedule_work(struct apds993x_data *data,
 		unsigned long delay)
@@ -1204,6 +1212,10 @@ static void apds993x_work_handler(struct work_struct *work)
 	int status;
 	int ch0data;
 	int enable;
+#ifdef APDS993X_ALS_SENSOR_INT
+    int ch1data;
+	int luxValue=0;
+#endif
 
 #ifdef APDS993X_PM_IRQ_SYNC
 	if(wake_lock_active(&data->wakelock))
@@ -1232,10 +1244,37 @@ static void apds993x_work_handler(struct work_struct *work)
 
 	if ((status & enable & 0x30) == 0x30) {
 		/* both PS and ALS are interrupted */
-		apds993x_change_als_threshold(client);
+	//	apds993x_change_als_threshold(client);
+
 
 		ch0data = i2c_smbus_read_word_data(client,
 				CMD_WORD|APDS993X_CH0DATAL_REG);
+#ifdef APDS993X_ALS_SENSOR_INT
+        ch1data = i2c_smbus_read_word_data(client,
+                CMD_WORD|APDS993X_CH1DATAL_REG);
+        luxValue = LuxCalculation(client, ch0data, ch1data);
+        SENSOR_LOG("APDS9930 light IRQ 0x10 lux: %d",luxValue);
+        if(luxValue > ALS_LUX_THRESHOLD)
+        {
+            SENSOR_LOG("als_data(%d)>THRESOLD(%d), als state is changed dark to bright"
+                    , luxValue, ALS_LUX_THRESHOLD);
+            apds993x_set_ailt( client, CH0DATA_THRESHOLD);
+            apds993x_set_aiht( client, 0xFFFF);
+
+        }
+        else if (luxValue<= ALS_LUX_THRESHOLD)
+        {
+            SENSOR_LOG("als_data(%d)>THRESOLD(%d), als state is changed bright to dark"
+                    , luxValue, ALS_LUX_THRESHOLD);
+
+            apds993x_set_ailt( client, 0);
+            apds993x_set_aiht( client, CH0DATA_THRESHOLD);
+        }
+        else
+        {
+            SENSOR_LOG("als state is not changed. als_data(%d)", luxValue);
+        }
+#endif
 		if (ch0data < (75 * (1024 * (256 - data->atime))) / 100) {
 			apds993x_change_ps_threshold(client);
 		} else {
@@ -1298,7 +1337,35 @@ static void apds993x_work_handler(struct work_struct *work)
 		apds993x_set_command(client, 0);
 	} else if ((status & enable & 0x10) == 0x10) {
 		/* only ALS is interrupted */
-		apds993x_change_als_threshold(client);
+//		apds993x_change_als_threshold(client);
+#ifdef APDS993X_ALS_SENSOR_INT
+        ch0data = i2c_smbus_read_word_data(client,
+                CMD_WORD|APDS993X_CH0DATAL_REG);
+        ch1data = i2c_smbus_read_word_data(client,
+                CMD_WORD|APDS993X_CH1DATAL_REG);
+        luxValue = LuxCalculation(client, ch0data, ch1data);
+        SENSOR_LOG("APDS9930 light IRQ 0x10 lux: %d",luxValue);
+        if(luxValue > ALS_LUX_THRESHOLD)
+        {
+            SENSOR_LOG("als_data(%d)>THRESOLD(%d), als state is changed dark to bright"
+                    , luxValue, ALS_LUX_THRESHOLD);
+            apds993x_set_ailt( client, CH0DATA_THRESHOLD);
+            apds993x_set_aiht( client, 0xFFFF);
+
+        }
+        else if (luxValue<= ALS_LUX_THRESHOLD)
+        {
+            SENSOR_LOG("als_data(%d)>THRESOLD(%d), als state is changed bright to dark"
+                    , luxValue, ALS_LUX_THRESHOLD);
+
+            apds993x_set_ailt( client, 0);
+            apds993x_set_aiht( client, CH0DATA_THRESHOLD);
+        }
+        else
+        {
+            SENSOR_LOG("als state is not changed. als_data(%d)", luxValue);
+        }
+#endif
 
 		/* 1 = CMD_CLR_ALS_INT */
 		apds993x_set_command(client, 1);
@@ -1414,6 +1481,41 @@ static int apds993x_enable_als_sensor(struct i2c_client *client, int val)
                                 }
 			}
 #endif
+            /*adding als_sensor_int*/
+#ifdef APDS993X_ALS_SENSOR_INT
+            SENSOR_LOG("APDS993X_ALS_SENSOR_INT is enable %s\n", __func__);
+			/*
+			 *  force first ALS interrupt in order to
+			 * get environment reading
+			 */
+			apds993x_set_ailt( client, 0xFFFF);
+#ifdef CONFIG_APDS9930_DEBUG
+			pr_info("%s: apds993x_set_ailt 0xFFFF\n", __func__);
+#endif
+			apds993x_set_aiht( client, 0);
+#ifdef CONFIG_APDS9930_DEBUG
+			pr_info("%s: apds993x_set_aiht 0x00\n", __func__);
+#endif
+
+			if (data->enable_ps_sensor) {
+				/* Enable both ALS and PS with interrupt */
+				if(apds993x_set_enable(client, 0x37) < 0) {
+#ifdef CONFIG_APDS9930_DEBUG
+				pr_err("%s: apds993x_set_enable_0x37\n", __func__);
+#endif
+                                  goto out;
+                                }
+			} else {
+				/* only enable light sensor with interrupt*/
+				if(apds993x_set_enable(client, 0x13) < 0) {
+#ifdef CONFIG_APDS9930_DEBUG
+				pr_err("%s: apds993x_set_enable_0x13\n", __func__);
+#endif
+                                  goto out;
+                                }
+			}
+#endif
+            /*adding als_sensor_int*/
 
 		/* to send lux initial value to hal */
 		input_report_abs(data->input_dev_als, ABS_LIGHT, 30001);
@@ -1428,7 +1530,7 @@ static int apds993x_enable_als_sensor(struct i2c_client *client, int val)
 			if(!cancel_delayed_work(&data->als_dwork)) {
 			    flush_delayed_work(&data->als_dwork);
                         }
-			queue_delayed_work(apds993x_workqueue, &data->als_dwork, 0);
+			queue_delayed_work(apds993x_workqueue, &data->als_dwork, msecs_to_jiffies(250));
 #endif
 		}
 	} else {
@@ -1626,6 +1728,15 @@ static int apds993x_enable_ps_sensor(struct i2c_client *client, int val)
 					goto out;
 				}
 #endif
+#ifdef APDS993X_ALS_SENSOR_INT
+				/* enable ALS and PS interrupt */
+				if (apds993x_set_enable(client, 0x37) <0) {
+#ifdef CONFIG_APDS9930_DEBUG
+				pr_err("%s: apds993x_set_enable 0x37\n", __func__);
+#endif
+					goto out;
+				}
+#endif
 			}
 			if (apds993x_set_pers(client, 0x02)<0) {
 #ifdef CONFIG_APDS9930_DEBUG
@@ -1663,6 +1774,36 @@ static int apds993x_enable_ps_sensor(struct i2c_client *client, int val)
 					&data->als_dwork,
 					msecs_to_jiffies(data->als_poll_delay));
 #else
+			/* reconfigute light sensor setting */
+			/* Power Off */
+			if (apds993x_set_enable(client,0) <0) {
+#ifdef CONFIG_APDS9930_DEBUG
+			pr_err("%s: apds993x_set_enable 0\n", __func__);
+#endif
+				goto out;
+			}
+			/* Force ALS interrupt */
+			apds993x_set_ailt( client, 0xFFFF);
+#ifdef CONFIG_APDS9930_DEBUG
+			pr_info("%s: apds993x_set_ailt 0xFFFF\n", __func__);
+#endif
+			apds993x_set_aiht( client, 0);
+#ifdef CONFIG_APDS9930_DEBUG
+			pr_info("%s: apds993x_set_aiht 0\n", __func__);
+#endif
+
+			// 29-Feb-2012 KK
+			// Force PS interrupt every PS conversion cycle
+			// instead of comparing threshold value
+
+			if (apds993x_set_enable(client, 0x13) <0) {  /* only enable light sensor and WAIT */
+#ifdef CONFIG_APDS9930_DEBUG
+			pr_err("%s: apds993x_set_enable 0x13\n", __func__);
+#endif
+				goto out;
+			}
+#endif
+#ifdef APDS993X_ALS_SENSOR_INT
 			/* reconfigute light sensor setting */
 			/* Power Off */
 			if (apds993x_set_enable(client,0) <0) {
@@ -2660,7 +2801,7 @@ static int sensor_regulator_power_on(struct apds993x_data *data, bool on)
 		}
 	}
 
-	msleep(130);
+	usleep_range(20000, 21000);
 
 	return 0;
 
@@ -2865,7 +3006,7 @@ static int apds993x_probe(struct i2c_client *client,
 	struct apds993x_platform_data *pdata;
 	int err = 0;
 
-	pr_debug("%s\n", __func__);
+	SENSOR_LOG("%s\n", __func__);
 
 	if (!i2c_check_functionality(adapter, I2C_FUNC_SMBUS_BYTE)) {
 		err = -EIO;
@@ -3165,6 +3306,7 @@ static struct i2c_driver apds993x_driver = {
 static void apds993x_init_async(void *data, async_cookie_t cookie)
 {
 	int ret = 0;
+	msleep(500);
 	apds993x_workqueue = create_workqueue("proximity_als");
 	if (!apds993x_workqueue) {
 		pr_err("%s: out of memory\n", __func__);

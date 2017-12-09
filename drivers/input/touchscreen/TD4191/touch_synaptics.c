@@ -297,6 +297,9 @@ bool wakeup_by_swipe;
 /* Define EE_SHORT in order to enable sensor speed/noise/e_e short test */
 //#define EE_SHORT
 
+#define MAX_LOG_FILE_SIZE 	(10 * 1024 * 1024) /* 10 M byte */
+#define MAX_LOG_FILE_COUNT 	4
+
 extern void release_all_touch_event(struct lge_touch_data *ts);
 
 static u8 half_err_cnt;
@@ -326,6 +329,88 @@ void touch_disable_irq(unsigned int irq)
 	}
 }
 
+static void log_file_size_check(char *fname)
+{
+	struct file *file;
+	loff_t file_size = 0;
+	int i = 0;
+	char buf1[128] = {0};
+	char buf2[128] = {0};
+	mm_segment_t old_fs = get_fs();
+	int ret = 0;
+
+	set_fs(KERNEL_DS);
+	if (fname) {
+		file = filp_open(fname, O_RDONLY, 0666);
+		sys_chmod(fname, 0666);
+	} else {
+		TOUCH_ERR_MSG("%s : fname is NULL, can not open FILE\n",
+				__func__);
+		goto error;
+	}
+
+	if (IS_ERR(file)) {
+		TOUCH_ERR_MSG("%s : ERR(%ld) Open file error [%s]\n",
+				__func__, PTR_ERR(file), fname);
+		goto error;
+	}
+
+	file_size = vfs_llseek(file, 0, SEEK_END);
+	TOUCH_INFO_MSG("%s : [%s] file_size = %lld\n",
+			__func__, fname, file_size);
+
+	filp_close(file, 0);
+
+	if (file_size > MAX_LOG_FILE_SIZE) {
+		TOUCH_INFO_MSG("%s : [%s] file_size(%lld) > MAX_LOG_FILE_SIZE(%d)\n",
+				__func__, fname, file_size, MAX_LOG_FILE_SIZE);
+
+		for (i = MAX_LOG_FILE_COUNT - 1; i >= 0; i--) {
+			if (i == 0)
+				sprintf(buf1, "%s", fname);
+			else
+				sprintf(buf1, "%s.%d", fname, i);
+
+			ret = sys_access(buf1, 0);
+
+			if (ret == 0) {
+				TOUCH_INFO_MSG("%s : file [%s] exist\n",
+						__func__, buf1);
+
+				if (i == (MAX_LOG_FILE_COUNT - 1)) {
+					if (sys_unlink(buf1) < 0) {
+						TOUCH_ERR_MSG("%s : failed to remove file [%s]\n",
+								__func__, buf1);
+						goto error;
+					}
+
+					TOUCH_INFO_MSG("%s : remove file [%s]\n",
+							__func__, buf1);
+				} else {
+					sprintf(buf2, "%s.%d",
+							fname,
+							(i + 1));
+
+					if (sys_rename(buf1, buf2) < 0) {
+						TOUCH_ERR_MSG("%s : failed to rename file [%s] -> [%s]\n",
+								__func__, buf1, buf2);
+						goto error;
+					}
+
+					TOUCH_INFO_MSG("%s : rename file [%s] -> [%s]\n",
+							__func__, buf1, buf2);
+				}
+			} else {
+				TOUCH_INFO_MSG("%s : file [%s] does not exist (ret = %d)\n",
+						__func__, buf1, ret);
+			}
+		}
+	}
+error:
+	set_fs(old_fs);
+	return;
+}
+
 void write_time_log(char *filename, char *data, int data_include)
 {
 	int fd = 0;
@@ -352,7 +437,7 @@ void write_time_log(char *filename, char *data, int data_include)
 
 	if (filename == NULL) {
 		if (factory_boot)
-			fname = "/data/logger/touch_self_test.txt";
+			fname = "/data/touch/touch_self_test.txt";
 		else
 			fname = "/sdcard/touch_self_test.txt";
 	} else {
@@ -1858,7 +1943,7 @@ static ssize_t show_synaptics_fw_version(struct i2c_client *client, char *buf)
 				ts->fw_info.fw_version);
 	else
 		ret += snprintf(buf+ret,
-				PAGE_SIZE-ret, 
+				PAGE_SIZE-ret,
 				"version : v%d.%02d\n",
 				((ts->fw_info.fw_version[3] & 0x80) >> 7),
 				(ts->fw_info.fw_version[3] & 0x7F));
@@ -2129,6 +2214,11 @@ static ssize_t show_sd(struct i2c_client *client, char *buf)
 				"state=[suspend]. we cannot use I2C, now. Test Result: Fail\n");
 	}
 
+	if (factory_boot)
+		log_file_size_check("/data/touch/touch_self_test.txt");
+	else
+		log_file_size_check("/sdcard/touch_self_test.txt");
+
 	return ret;
 }
 
@@ -2203,7 +2293,7 @@ static ssize_t store_rawdata(struct i2c_client *client, const char *buf, size_t 
 	int full_raw_upper_ret = 0;
 
 	char rawdata_file_path[64] = {0,};
-	sscanf(buf, "%63s", rawdata_file_path);
+	sscanf(buf, "%s", rawdata_file_path);
 
 	touch_disable_irq(ts->client->irq);
 
@@ -2518,12 +2608,7 @@ static ssize_t store_reg_ctrl(struct i2c_client *client,
 	int offset = 0;
 	u32 value = 0;
 
-	sscanf(buf, "%5s %x %x %d %x ", command, &page, &reg, &offset, &value);
-
-	if ((offset < 0) || (offset > 49)) {
-		TOUCH_ERR_MSG("invalid offset[%d]\n", offset);
-		return count;
-	}
+	sscanf(buf, "%s %x %x %d %x ", command, &page, &reg, &offset, &value);
 
 	if (!strcmp(command, "write")) {
 		synaptics_ts_page_data_read(client, page, reg,
@@ -2608,7 +2693,7 @@ static ssize_t store_object_report(struct i2c_client *client,
 	u8 old[8];
 	u8 new[8];
 
-	sscanf(buf, "%15s %hhu", select, &value);
+	sscanf(buf, "%s %hhu", select, &value);
 
 	if ((strlen(select) > 8) || (value > 1)) {
 		TOUCH_INFO_MSG("<writing object_report guide>\n");

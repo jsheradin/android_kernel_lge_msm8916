@@ -46,3 +46,11 @@ endif
 ifeq ($(CONFIG_TOUCHSCREEN_MSM8916_C100N), y)
 obj-y   += ver_2_0/
 endif
+
+ifeq ($(CONFIG_TOUCHSCREEN_MSM8916_M216N), y)
+obj-y   += ver_2_0/
+endif
+
+ifeq ($(CONFIG_TOUCHSCREEN_MSM8916_M216), y)
+obj-y   += ver_2_0/
+endif

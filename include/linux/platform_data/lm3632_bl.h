@@ -59,4 +59,6 @@ struct lm3632_device {
 
 };
 
+#define RAMP_BITS_MASK ((BIT(3)|BIT(4)|BIT(5)|BIT(6)))
+#define RAMP_BIT_SHIFT 3
 #endif /* __LINUX_LM3632_H */

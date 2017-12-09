@@ -25,6 +25,7 @@
 #include <linux/delay.h>
 #include <linux/irq.h>
 #include <linux/input/lge_touch_notify.h>
+#include <linux/input.h>
 
 /*
  *  Include to touch core Header File
@@ -43,7 +44,7 @@ static void touch_suspend(struct device *dev);
 static void touch_resume(struct device *dev);
 
 
-static void touch_report_cancel_event(struct touch_core_data *ts)
+static void touch_report_palm_event(struct touch_core_data *ts)
 {
 	u16 old_mask = ts->old_mask;
 	int i = 0;
@@ -72,9 +73,6 @@ static void touch_report_event(struct touch_core_data *ts)
 	u16 release_mask = 0;
 	u16 change_mask = 0;
 	int i;
-	bool hide_lockscreen_coord =
-		((atomic_read(&ts->state.lockscreen) == LOCKSCREEN_LOCK) &&
-		 (ts->role.hide_coordinate));
 
 	TOUCH_TRACE();
 
@@ -88,9 +86,9 @@ static void touch_report_event(struct touch_core_data *ts)
 			change_mask, press_mask, release_mask);
 
 	/* Palm state - Report Pressure value 255 */
-	if (ts->is_cancel) {
-		touch_report_cancel_event(ts);
-		ts->is_cancel = 0;
+	if (ts->is_palm) {
+		touch_report_palm_event(ts);
+		ts->is_palm = 0;
 	}
 
 	for (i = 0; i < MAX_FINGER; i++) {
@@ -112,31 +110,21 @@ static void touch_report_event(struct touch_core_data *ts)
 					ts->tdata[i].orientation);
 
 			if (press_mask & (1 << i)) {
-				if (hide_lockscreen_coord) {
-					TOUCH_I("%d finger pressed:<%d>(xxxx,xxxx,xxxx)\n",
-							ts->tcount, i);
-				} else {
-					TOUCH_I("%d finger pressed:<%d>(%4d,%4d,%4d)\n",
-							ts->tcount,
-							i,
-							ts->tdata[i].x,
-							ts->tdata[i].y,
-							ts->tdata[i].pressure);
-				}
-			}
-		} else if (release_mask & (1 << i)) {
-			input_mt_slot(ts->input, i);
-			input_report_abs(ts->input, ABS_MT_TRACKING_ID, -1);
-			if (hide_lockscreen_coord) {
-				TOUCH_I(" finger released:<%d>(xxxx,xxxx,xxxx)\n",
-						i);
-			} else {
-				TOUCH_I(" finger released:<%d>(%4d,%4d,%4d)\n",
+				TOUCH_I("%d finger pressed:<%d>(%4d,%4d,%4d)\n",
+						ts->tcount,
 						i,
 						ts->tdata[i].x,
 						ts->tdata[i].y,
 						ts->tdata[i].pressure);
 			}
+		} else if (release_mask & (1 << i)) {
+			input_mt_slot(ts->input, i);
+			input_report_abs(ts->input, ABS_MT_TRACKING_ID, -1);
+			TOUCH_I(" finger released:<%d>(%4d,%4d,%4d)\n",
+					i,
+					ts->tdata[i].x,
+					ts->tdata[i].y,
+					ts->tdata[i].pressure);
 		}
 	}
 
@@ -146,14 +134,13 @@ static void touch_report_event(struct touch_core_data *ts)
 
 void touch_report_all_event(struct touch_core_data *ts)
 {
-	ts->is_cancel = 1;
 	if (ts->old_mask) {
 		ts->new_mask = 0;
 		touch_report_event(ts);
 		ts->tcount = 0;
 		memset(ts->tdata, 0, sizeof(struct touch_data) * MAX_FINGER);
 	}
-	ts->is_cancel = 0;
+	ts->is_palm = 0;
 }
 
 static void touch_core_initialize(struct touch_core_data *ts)
@@ -214,8 +201,6 @@ irqreturn_t touch_irq_thread(int irq, void *dev_id)
 		if (ret == -ERESTART) {
 			TOUCH_I("IRQ - IC reset delay = %d\n",
 				ts->caps.hw_reset_delay);
-			if (atomic_read(&ts->state.pm) == DEV_PM_RESUME)
-				wake_lock_timeout(&ts->lpwg_wake_lock, msecs_to_jiffies(1000));
 			touch_interrupt_control(ts->dev, INTERRUPT_DISABLE);
 			ts->driver->power(ts->dev, POWER_OFF);
 			ts->driver->power(ts->dev, POWER_ON);
@@ -365,6 +350,8 @@ static int touch_init_input(struct touch_core_data *ts)
 			ts->caps.max_id);
 	set_bit(EV_SYN, input->evbit);
 	set_bit(EV_ABS, input->evbit);
+    set_bit(EV_KEY, input->evbit);
+	set_bit(KEY_WAKEUP, input->evbit);
 	set_bit(INPUT_PROP_DIRECT, input->propbit);
 	input_set_abs_params(input, ABS_MT_POSITION_X, 0,
 			ts->caps.max_x, 0, 0);
@@ -438,7 +425,6 @@ static void touch_resume(struct device *dev)
 	TOUCH_I("%s Start\n", __func__);
 	mutex_lock(&ts->lock);
 	atomic_set(&ts->state.fb, FB_RESUME);
-	atomic_set(&ts->state.pm, DEV_PM_AWAKE);
 	/* if need skip, return value is not 0 in pre_resume */
 	ret = ts->driver->resume(dev);
 	mutex_unlock(&ts->lock);
@@ -548,6 +534,12 @@ static void touch_send_uevent(struct touch_core_data *ts, int type)
 				KOBJ_CHANGE, uevent_str[type]);
 		TOUCH_I("%s\n",  uevent_str[type][0]);
 		touch_report_all_event(ts);
+        atomic_set(&ts->state.uevent, UEVENT_IDLE);
+        if (type == 8) {
+			input_report_key(ts->input, KEY_WAKEUP, BUTTON_PRESSED);
+			input_report_key(ts->input, KEY_WAKEUP, BUTTON_RELEASED);
+			input_sync(ts->input);
+		}
 	}
 }
 

@@ -107,8 +107,7 @@ next_tag:
 		goto length_too_long;
 	if (unlikely(n > datalen - dp))
 		goto data_overrun_error;
-
-	len=0;
+	len = 0;
 	for (; n > 0; n--) {
 		len <<= 8;
 		len |= data[dp++];

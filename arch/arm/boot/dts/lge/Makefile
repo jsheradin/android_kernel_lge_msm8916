@@ -33,8 +33,10 @@ dtb-$(CONFIG_MACH_MSM8916_G4STYLUSN_VTR_CA)	+= msm8916-g4stylusn.dtb
 dtb-$(CONFIG_MACH_MSM8916_G4STYLUSN_GLOBAL_COM)	+= msm8916-g4stylusn.dtb
 dtb-$(CONFIG_MACH_MSM8916_G4STYLUSW_KT_KR)      += msm8916-g4stylusw.dtb
 dtb-$(CONFIG_MACH_MSM8916_YG_SKT_KR)      += msm8916-yg.dtb
+dtb-$(CONFIG_MACH_MSM8916_M216N_KR) += msm8916-m216n.dtb
 dtb-$(CONFIG_MACH_MSM8916_C100N_KR) += msm8916-c100n.dtb
 dtb-$(CONFIG_MACH_MSM8916_C100N_GLOBAL_COM) += msm8916-c100n.dtb
+dtb-$(CONFIG_MACH_MSM8916_M216_GLOBAL_COM) += msm8916-m216.dtb
 dtb-$(CONFIG_MACH_MSM8916_C100_GLOBAL_COM) += msm8916-c100.dtb
 dtb-$(CONFIG_MACH_MSM8916_G4STYLUSDS_GLOBAL_COM) += msm8916-g4stylusds.dtb
 dtb-$(CONFIG_MACH_MSM8916_G4STYLUS_CRK_US) += msm8916-g4stylus.dtb
@@ -53,7 +55,6 @@ dtb-$(CONFIG_MACH_MSM8916_PH1_GLOBAL_COM)    += msm8916-ph1.dtb
 dtb-$(CONFIG_MACH_MSM8916_K5_GLOBAL_COM)    += msm8916-k5.dtb
 dtb-$(CONFIG_MACH_MSM8916_K5_CMO_CN)    += msm8916-k5.dtb
 dtb-$(CONFIG_MACH_MSM8916_K5_KR)    += msm8916-k5.dtb
-dtb-$(CONFIG_MACH_MSM8916_K5_JP)    += msm8916-k5.dtb
 dtb-$(CONFIG_MACH_MSM8939_P1BC_SPR_US)    += msm8939-p1bc.dtb
 dtb-$(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM)    += msm8939-p1b.dtb
 dtb-$(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR)    += msm8939-p1bssn.dtb
@@ -138,10 +139,14 @@ else ifeq ($(CONFIG_MACH_MSM8916_G4STYLUSW_KT_KR),y)
 	DTS_TARGET := msm8916-g4stylusw_kt_kr
 else ifeq ($(CONFIG_MACH_MSM8916_YG_SKT_KR),y)
 	DTS_TARGET := msm8916-yg_skt_kr
+else ifeq ($(CONFIG_MACH_MSM8916_M216N_KR),y)
+	DTS_TARGET := msm8916-m216n_kr
 else ifeq ($(CONFIG_MACH_MSM8916_C100N_KR),y)
 	DTS_TARGET := msm8916-c100n_kr
 else ifeq ($(CONFIG_MACH_MSM8916_C100N_GLOBAL_COM),y)
 	DTS_TARGET := msm8916-c100n_global_com
+else ifeq ($(CONFIG_MACH_MSM8916_M216_GLOBAL_COM),y)
+	DTS_TARGET := msm8916-m216_global_com
 else ifeq ($(CONFIG_MACH_MSM8916_C100_GLOBAL_COM),y)
 	DTS_TARGET := msm8916-c100_global_com
 else ifeq ($(CONFIG_MACH_MSM8916_G4STYLUSDS_GLOBAL_COM),y)
@@ -176,8 +181,6 @@ else ifeq ($(CONFIG_MACH_MSM8916_K5_CMO_CN),y)
     DTS_TARGET := msm8916-k5_cmo_cn
 else ifeq ($(CONFIG_MACH_MSM8916_K5_KR),y)
 	DTS_TARGET := msm8916-k5_kr
-else ifeq ($(CONFIG_MACH_MSM8916_K5_JP),y)
-	DTS_TARGET := msm8916-k5_jp
 else ifeq ($(CONFIG_MACH_MSM8939_P1BC_SPR_US),y)
         DTS_TARGET := msm8939-p1bc_spr_us
 else ifeq ($(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM),y)

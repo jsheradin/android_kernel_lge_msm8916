@@ -433,6 +433,10 @@ int get_backlight_state(void);
 #endif
 /* end of pre-define */
 
+#ifdef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
+extern void trigger_touch_temp(int temp);
+#endif
+
 static unsigned int cable_type;
 static unsigned int cable_smem_size;
 static unsigned int factory_mode;
@@ -1096,6 +1100,9 @@ static int bq24296_enable_charging(struct bq24296_chip *chip, bool enable)
 	return 0;
 }
 
+#if 0
+/* 8916 branch remove function */
+/* When remove battery after insert TA, display nobattery image after remove message  */
 static int __bq24296_get_prop_batt_present(struct bq24296_chip *chip)
 {
 	int temp = 0;
@@ -1123,6 +1130,35 @@ static int bq24296_get_prop_batt_present(struct bq24296_chip *chip)
 {
 	return chip->batt_present ? 1 :
 		__bq24296_get_prop_batt_present(chip);
+}
+#endif
+
+static int bq24296_get_prop_batt_present(struct bq24296_chip *chip)
+{
+	int temp = 0;
+	bool batt_present;
+	NULL_CHECK(chip, -EINVAL);
+
+	temp = bq24296_get_batt_temp_origin();
+
+	if (is_factory_cable()) {
+		pr_info("factory cable detect\n");
+		return 1;
+	}
+
+	if (temp <= -300 || temp >= 790) {
+		pr_err("\n\n  battery missing(%d) \n\n", temp);
+		batt_present = chip->batt_present = 0;
+	} else
+		batt_present = 1;
+
+	pr_debug("present=%d, chip->batt_present=%d\n",
+		batt_present ? 1 : 0, chip->batt_present);
+
+	if (pseudo_batt_info.mode) {
+		return 1;
+	}
+	return batt_present;
 }
 
 static void bq24296_chg_timeout(struct bq24296_chip *chip,
@@ -1886,6 +1922,9 @@ static int bq24296_batt_power_get_property(struct power_supply *psy,
 	case POWER_SUPPLY_PROP_TEMP:
 		if (pseudo_batt_info.mode) {
 			val->intval = pseudo_batt_info.temp;
+#ifdef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
+			pr_info("batt_temp: %d\n", bq24296_get_batt_temp_origin());
+#endif
 			break;
 		}
 		val->intval = bq24296_get_prop_batt_temp(chip);
@@ -2156,7 +2195,7 @@ static void bq24296_wlc_otg_fake_proc(struct bq24296_chip *chip)
 }
 #endif
 
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined (CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined (CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && !defined(CONFIG_MACH_MSM8939_PH2_GLOBAL_COM)
 static void bq24296_decide_otg_mode(struct bq24296_chip *chip)
 {
@@ -2351,7 +2390,7 @@ static void bq24296_batt_external_power_changed(struct power_supply *psy)
 	chip->usb_psy = _psy_check_ext(chip->usb_psy, _USB_);
 	NULL_CHECK_VOID(chip->usb_psy);
 
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined (CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined (CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && \
 	!defined(CONFIG_MACH_MSM8939_PH2_GLOBAL_COM)
 	bq24296_decide_otg_mode(chip);
@@ -2920,6 +2959,11 @@ bq24296_set_thermal_chg_current_set(const char *val, struct kernel_param *kp)
 		return 0;
 	}
 
+	if (lge_get_factory_boot()) {
+		pr_info("bootmode is factory\n");
+		return 0;
+	}
+
 #ifdef CONFIG_LGE_THERMALE_CHG_CONTROL
 	pr_info("thermal-engine set chg current to %d\n",
 			bq24296_thermal_mitigation);
@@ -2979,7 +3023,7 @@ static void bq24296_monitor_batt_temp(struct work_struct *work)
 
 	chip->batt_psy.get_property(&(chip->batt_psy),
 			  POWER_SUPPLY_PROP_TEMP, &ret);
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	req.batt_temp = ret.intval;
 #else
 	req.batt_temp = ret.intval / 10;
@@ -3105,6 +3149,10 @@ static void bq24296_monitor_batt_temp(struct work_struct *work)
 
 	if (is_changed == true)
 		power_supply_changed(&chip->batt_psy);
+
+#ifdef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
+	trigger_touch_temp(bq24296_get_batt_temp_origin()/10);
+#endif
 
 	bq24296_reginfo(chip);
 

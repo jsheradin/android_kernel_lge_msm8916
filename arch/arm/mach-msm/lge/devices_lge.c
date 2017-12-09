@@ -399,6 +399,9 @@ char *rev_str[] = {"evb1", "evb2", "rev_a", "rev_a2", "rev_b", "rev_c", "rev_d",
       defined(CONFIG_MACH_MSM8916_C100N_GLOBAL_COM) || defined(CONFIG_MACH_MSM8916_C100_GLOBAL_COM)
 char *rev_str[] = {"rev_0","rev_a", "rev_b", "rev_c", "rev_d", "rev_e",
 	"rev_f", "rev_10", "rev_11", "rev_mkt", "revserved"};
+#elif defined(CONFIG_MACH_MSM8916_M216N_KR) || defined(CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
+char *rev_str[] = {"rev_0","rev_a", "rev_b", "rev_c", "rev_d", "rev_e",
+	"rev_f", "rev_10", "rev_11", "rev_12", "rev_13", "revserved"};
 #else
 char *rev_str[] = {"evb1", "evb2", "rev_a", "rev_b", "rev_c", "rev_d",
 	"rev_e", "rev_f", "rev_10", "rev_11","reserved"};
@@ -589,7 +592,6 @@ int lge_get_lg4895_revision(void)
 	pr_info("[LCD] lg4895 revision is %d\n", lg4895_revision);
 	return lg4895_revision;
 }
-EXPORT_SYMBOL(lge_get_lg4895_revision);
 #else
 static int __init display_db7400_setup(char *db7400_cmd)
 {
@@ -779,12 +781,8 @@ int lge_get_factory_boot(void)
 }
 
 static enum lge_laf_mode_type lge_laf_mode = LGE_LAF_MODE_NORMAL;
-static enum lge_laf_mode_type lge_mid_mode = LGE_LAF_MODE_NORMAL;
 static int __init lge_laf_mode_init(char *s)
 {
-	if (!strncmp(s, "MID", 3)) {
-		lge_mid_mode = LGE_LAF_MODE_MID;
-	}
 	if (strcmp(s, "") && strcmp(s, "MID")) {
 		lge_laf_mode = LGE_LAF_MODE_LAF;
 	}
@@ -818,10 +816,7 @@ enum lge_laf_mode_type lge_get_laf_mode(void)
 {
 	return lge_laf_mode;
 }
-enum lge_laf_mode_type lge_get_mid_mode(void)
-{
-	return lge_mid_mode;
-}
+
 static bool is_mfts_mode = 0;
 static int __init lge_mfts_mode_init(char *s)
 {

@@ -1,4 +1,4 @@
-/* Copyright (c) 2008-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2008-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -254,13 +254,12 @@ struct msm_fb_data_type {
 	int ext_ad_ctrl;
 	u32 ext_bl_ctrl;
 	u32 calib_mode;
-	u32 calib_mode_bl;
 	u32 ad_bl_level;
 	u32 bl_level;
 	u32 bl_scale;
 	u32 bl_min_lvl;
 	u32 unset_bl_level;
-	bool allow_bl_update;
+	u32 bl_updated;
 	u32 bl_level_old;
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
 	u32 calib_mode_bl;
@@ -271,7 +270,6 @@ struct msm_fb_data_type {
 	u32 bl_updated_ex;	// need to check
 	u32 bl_level_scaled_ex;
 #endif
-	u32 bl_level_scaled;
 	struct mutex bl_lock;
 
 	struct platform_device *pdev;

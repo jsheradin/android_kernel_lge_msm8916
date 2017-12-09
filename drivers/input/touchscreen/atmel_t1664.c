@@ -45,6 +45,7 @@
 
 #define LGE_TOUCH_NAME      "lge_touch"
 
+static struct mutex lpwg_lock;
 static struct mutex i2c_suspend_lock;
 static struct mutex irq_lock;
 
@@ -62,10 +63,24 @@ static unsigned char touched_finger_count = 0;
 static unsigned char patchevent_mask = 0;
 static unsigned char power_block_mask = 0;
 
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 bool thermal_status_mode = 0;
 extern int touch_thermal_mode;
 static bool check_panel = 0;
+#endif
+
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+bool is_self_cap_off = false;
+bool is_finger_mode = false;
+bool is_stylus_mode = false;
+static int finger_mode_count = 0;
+static int stylus_mode_count = 0;
+
+static int touch_current_temp = 0;
+static int touch_previous_temp_mode = 0;
+int check_current_temp_mode(int current_temp);
+void select_temp_event_knock_on(int temp_mode, int lpwg_mode);
+extern int bq24296_get_batt_temp_origin(void);
 #endif
 
 static struct bus_type touch_subsys = {
@@ -99,6 +114,7 @@ static u8 ime_status_value = 0;
 static bool factorymode = false;
 #endif
 static int g_usb_type = 0;
+static int factory_boot = 0;
 
 static int mxt_soft_reset(struct mxt_data *data);
 static int mxt_hw_reset(struct mxt_data *data);
@@ -114,7 +130,7 @@ static int mxt_command_backup(struct mxt_data *data, u8 value);
 static int mxt_command_reset(struct mxt_data *data, u8 value);
 static void mxt_regulator_disable(struct mxt_data *data);
 static void mxt_regulator_enable(struct mxt_data *data);
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 static int mxt_check_panel_type(struct mxt_data *data);
 static hw_rev_type lge_bd_rev = HW_REV_A;
 #endif
@@ -152,7 +168,7 @@ static void mxt_gesture_mode_start(struct mxt_data *data);
 static void save_lpwg_debug_reason(struct mxt_data *data, u8 *value);
 static void save_lpwg_debug_reason_print(struct mxt_data *data);
 #endif
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 extern int cradle_smart_cover_status(void);
 #endif
 static void touch_multi_tap_work(struct work_struct *multi_tap_work)
@@ -843,12 +859,12 @@ int mxt_get_self_reference_chk(struct mxt_data *data)
 
 static bool mxt_check_xy_range(struct mxt_data *data, u16 node)
 {
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	u8 x_line = node / data->channel_size.size_y;
 	u8 y_line = node % data->channel_size.size_y;
 #else
 	u8 x_line = node / data->info->matrix_ysize;
-	u8 y_line = node % data->info->matrix_xsize;
+	u8 y_line = node % data->info->matrix_ysize;
 #endif
 	return (y_line < data->rawdata->num_ynode) ?
 		(x_line < data->rawdata->num_xnode) : false;
@@ -910,7 +926,7 @@ static void mxt_prepare_debug_data(struct mxt_data *data)
 		error = -ENOMEM;
 		return ;
 	}
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	rawdata->num_xnode = data->channel_size.size_x;
 	rawdata->num_ynode = data->channel_size.size_y;
 	rawdata->num_nodes = rawdata->num_xnode * rawdata->num_ynode;
@@ -994,7 +1010,7 @@ static int mxt_read_all_diagnostic_data(struct mxt_data *data, u8 dbg_mode, char
 
 	*len += snprintf(buf + *len, write_page - *len, "\n===============================================");
 	*len += snprintf(buf + *len, write_page - *len, "===============================================");
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	end_page = (data->channel_size.size_x * data->channel_size.size_y) / NODE_PER_PAGE;
 #else
 	end_page = (data->info->matrix_xsize * data->info->matrix_ysize) / NODE_PER_PAGE;
@@ -1010,11 +1026,14 @@ static int mxt_read_all_diagnostic_data(struct mxt_data *data, u8 dbg_mode, char
 	/* read the dbg data */
 	for (read_page = 0 ; read_page < end_page; read_page++) {
 		for (node = 0; node < NODE_PER_PAGE; node++) {
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 			if (cnt%data->channel_size.size_y == 0) {
 				*len += snprintf(buf + *len , write_page - *len, "\n[X%02d] ", cnt/data->channel_size.size_y);
 				if (cnt/data->channel_size.size_y == data->channel_size.size_x) {
 #else
+			if (cnt / data->info->matrix_ysize >= data->channel_size.size_x) {
+				break;
+			}
 			if (cnt%data->info->matrix_ysize == 0) {
 				*len += snprintf(buf + *len , write_page - *len, "\n[X%02d] ", cnt/data->info->matrix_ysize);
 				if (cnt/data->info->matrix_ysize == data->info->matrix_xsize) {
@@ -1028,19 +1047,24 @@ static int mxt_read_all_diagnostic_data(struct mxt_data *data, u8 dbg_mode, char
 			if (!mxt_check_xy_range(data, cnt++)) {
 				break;
 			}
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 			value = mxt_treat_dbg_data(data, dbg_object, dbg_mode, read_point, num);
 
 			*len += snprintf(buf + *len , write_page - *len, "%6d", value);
 
+#if 0 /* remove unused variable */
 			if(dbg_mode == MXT_DIAG_REFERENCE_MODE && data->full_cap != NULL )
 				data->full_cap[num / data->channel_size.size_y][num % data->channel_size.size_y] = value;
+#endif
 #else
 			value = mxt_treat_dbg_data(data, dbg_object, dbg_mode, read_point, num);
-			*len += snprintf(buf + *len , write_page - *len, "%6d", value);
-
+			if(cnt % data->info->matrix_ysize <= data->channel_size.size_y && cnt % data->info->matrix_ysize != 0) {
+				*len += snprintf(buf + *len , write_page - *len, "%6d", value);
+			}
+#if 0 /* remove unused variable */
 			if(dbg_mode == MXT_DIAG_REFERENCE_MODE && data->full_cap != NULL )
 				data->full_cap[num / data->info->matrix_ysize][num % data->info->matrix_ysize] = value;
+#endif
 #endif
 			num++;
 		}
@@ -2146,6 +2170,41 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 			data->stylus_in_a_row_cnt = 0;
 		}
 
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+		if (is_self_cap_off && !is_finger_mode && !is_stylus_mode) {
+			if (id == 0 && (status & MXT_T100_TYPE_MASK) == MXT_T100_TYPE_FINGER) {
+				finger_mode_count++;
+				stylus_mode_count = 0;
+			} else if (id == 0 && (status & 0xFF) == 0xA4) {
+				stylus_mode_count++;
+				finger_mode_count = 0;
+			}
+
+			if (finger_mode_count > 2000) {
+				mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 2, 80);
+				mxt_write_object(data, MXT_SPT_CTECONFIG_T46, 3, 80);
+				mxt_write_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T100, 32, 30);
+
+				finger_mode_count = 0;
+				stylus_mode_count = 0;
+				is_finger_mode = true;
+				TOUCH_ERR_MSG("is_finger_mode is true\n");
+			}
+			if (stylus_mode_count > 100) {
+				finger_mode_count = 0;
+				stylus_mode_count = 0;
+				is_stylus_mode = true;
+				TOUCH_ERR_MSG("is_stylus_mode is true\n");
+			}
+		} else if(is_finger_mode) {
+			if (id == 0 && (status & MXT_T100_TYPE_MASK) == MXT_T100_TYPE_STYLUS) {
+				is_finger_mode = false;
+				TOUCH_ERR_MSG("is_finger_mode is false\n");
+				mxt_write_object(data, MXT_TOUCH_MULTITOUCHSCREEN_T100, 32, 8);
+			}
+		}
+#endif
+
 		if ((status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE || (status & MXT_T100_STATUS_MASK) == MXT_T100_SUPPRESSION) {
 			data->ts_data.curr_data[id].id = id;
 			data->ts_data.curr_data[id].status = FINGER_RELEASED;
@@ -2219,6 +2278,14 @@ static void mxt_proc_t100_message(struct mxt_data *data, u8 *message)
 #endif
 
 	} else {
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+		if (is_self_cap_off && !is_finger_mode && !is_stylus_mode) {
+			if ( (status & MXT_T100_STATUS_MASK) == MXT_T100_RELEASE) {
+				finger_mode_count = 0;
+			}
+		}
+#endif
+
 		/* Touch Release */
 		data->ts_data.curr_data[id].id = id;
 		data->ts_data.curr_data[id].status = FINGER_RELEASED;
@@ -2371,7 +2438,7 @@ out:
 	return 1;
 }
 
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 void check_touch_batt_temp(int therm_mode)
 {
 	if (global_mxt_data != NULL) {
@@ -2452,7 +2519,7 @@ void trigger_usb_state_from_otg(int usb_type)
 					mxt_patch_event(global_mxt_data, CHARGER_KNOCKON_WAKEUP);
 #endif
 				}
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 				else {
 					if (global_mxt_data->suspended == true) {
 						if (global_mxt_data->work_deepsleep_enabled) {
@@ -3074,12 +3141,14 @@ static int mxt_hw_reset(struct mxt_data *data)
 
 	return 0;
 }
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR /*not used*/
 static void mxt_power_reset(struct mxt_data *data)
 {
 	mxt_regulator_disable(data);
 	msleep(MXT_POWERON_DELAY);
 	mxt_regulator_enable(data);
 }
+#endif
 static void mxt_update_crc(struct mxt_data *data, u8 cmd, u8 value)
 {
 	/* on failure, CRC is set to 0 and config will always be downloaded */
@@ -3143,7 +3212,7 @@ static int mxt_set_t7_power_cfg(struct mxt_data *data, u8 sleep)
 	u16 tmp;
 
 	tmp = (u16)sizeof(data->t7_cfg);
-	
+
 	if (sleep == MXT_POWER_CFG_DEEPSLEEP)
 		new_config = &deepsleep;
 	else
@@ -3671,7 +3740,7 @@ static int mxt_read_info_block(struct mxt_data *data)
 	size_t size = 0;
 	void *buf = NULL;
 	struct mxt_info *info = NULL;
-	u16 tmp = 0; 
+	u16 tmp = 0;
 	#if 0
 	u32 calculated_crc = 0;
 	u8 *crc_ptr = NULL;
@@ -3775,7 +3844,7 @@ static int mxt_read_t9_resolution(struct mxt_data *data)
 	u16 tmp = 0;
 
 	memset(&range, 0, sizeof(range));
-	
+
 	object = mxt_get_object(data, MXT_TOUCH_MULTI_T9);
 	if (!object)
 		return -EINVAL;
@@ -3848,7 +3917,6 @@ static void mxt_regulator_enable(struct mxt_data *data)
 		gpio_set_value(data->pdata->gpio_ldo1, 1);
 	}
 
-	data->regulator_status = 1;
 
 	INIT_COMPLETION(data->bl_completion);
 
@@ -3859,7 +3927,8 @@ static void mxt_regulator_enable(struct mxt_data *data)
 	}
 	msleep(MXT_RESET_TIME);
 
-	TOUCH_DEBUG_MSG("%s() reset:%d, ldo2:%d, ldo1:%d\n",__func__, gpio_get_value(data->pdata->gpio_reset), gpio_get_value(data->pdata->gpio_ldo2), gpio_get_value(data->pdata->gpio_ldo1));
+	TOUCH_INFO_MSG("%s() reset:%d, ldo2:%d, ldo1:%d\n",__func__, gpio_get_value(data->pdata->gpio_reset), gpio_get_value(data->pdata->gpio_ldo2), gpio_get_value(data->pdata->gpio_ldo1));
+	data->regulator_status = 1;
 }
 
 static void mxt_regulator_disable(struct mxt_data *data)
@@ -3887,9 +3956,9 @@ static void mxt_regulator_disable(struct mxt_data *data)
 			return;
 		}
 	}
-	
+
 	/* vcc_i2c disable */
-	if(gpio_is_valid(data->pdata->gpio_ldo1)) 
+	if(gpio_is_valid(data->pdata->gpio_ldo1))
 		gpio_set_value(data->pdata->gpio_ldo1, 0);
 
 	TOUCH_INFO_MSG("%s \n", __func__);
@@ -4146,7 +4215,7 @@ static ssize_t mxt_object_control(struct mxt_data *data, const char *buf, size_t
 	u16 size = 0;
 	u16 addr = 0;
 
-	sscanf(buf, "%5s %d %d %d", command, &type, &addr_offset, &value);
+	sscanf(buf, "%s %d %d %d", command, &type, &addr_offset, &value);
 
 	if (!strncmp(command, "mode", 4)) { /*mode*/
 		TOUCH_INFO_MSG("Mode changed MODE: %d\n", type);
@@ -4789,13 +4858,95 @@ static void write_file(char *filename, char *data, int time)
 
 }
 
+void log_file_size_check(char *fname)
+{
+	struct file *file;
+	loff_t file_size = 0;
+	int i = 0;
+	char buf1[128] = {0};
+	char buf2[128] = {0};
+	mm_segment_t old_fs = get_fs();
+	int ret = 0;
+
+	set_fs(KERNEL_DS);
+	if (fname) {
+		file = filp_open(fname, O_RDONLY, 0666);
+		sys_chmod(fname, 0666);
+	} else {
+		TOUCH_ERR_MSG("%s : fname is NULL, can not open FILE\n",
+				__func__);
+		goto error;
+	}
+
+	if (IS_ERR(file)) {
+		TOUCH_ERR_MSG("%s : ERR(%ld) Open file error [%s]\n",
+				__func__, PTR_ERR(file), fname);
+		goto error;
+	}
+
+	file_size = vfs_llseek(file, 0, SEEK_END);
+	TOUCH_INFO_MSG("%s : [%s] file_size = %lld\n",
+			__func__, fname, file_size);
+
+	filp_close(file, 0);
+
+	if (file_size > MAX_LOG_FILE_SIZE) {
+		TOUCH_INFO_MSG("%s : [%s] file_size(%lld) > MAX_LOG_FILE_SIZE(%d)\n",
+				__func__, fname, file_size, MAX_LOG_FILE_SIZE);
+
+		for (i = MAX_LOG_FILE_COUNT - 1; i >= 0; i--) {
+			if (i == 0)
+				sprintf(buf1, "%s", fname);
+			else
+				sprintf(buf1, "%s.%d", fname, i);
+
+			ret = sys_access(buf1, 0);
+
+			if (ret == 0) {
+				TOUCH_INFO_MSG("%s : file [%s] exist\n",
+						__func__, buf1);
+
+				if (i == (MAX_LOG_FILE_COUNT - 1)) {
+					if (sys_unlink(buf1) < 0) {
+						TOUCH_ERR_MSG("%s : failed to remove file [%s]\n",
+								__func__, buf1);
+						goto error;
+					}
+
+					TOUCH_INFO_MSG("%s : remove file [%s]\n",
+							__func__, buf1);
+				} else {
+					sprintf(buf2, "%s.%d",
+							fname,
+							(i + 1));
+
+					if (sys_rename(buf1, buf2) < 0) {
+						TOUCH_ERR_MSG("%s : failed to rename file [%s] -> [%s]\n",
+								__func__, buf1, buf2);
+						goto error;
+					}
+
+					TOUCH_INFO_MSG("%s : rename file [%s] -> [%s]\n",
+							__func__, buf1, buf2);
+				}
+			} else {
+				TOUCH_INFO_MSG("%s : file [%s] does not exist (ret = %d)\n",
+						__func__, buf1, ret);
+			}
+		}
+	}
+error:
+	set_fs(old_fs);
+	return;
+}
 static ssize_t mxt_run_delta_show(struct mxt_data *data, char *buf)
 {
 	ssize_t len = 0;
 	ssize_t ret_len = 0;
 	char *ref_buf = NULL;
 	int write_page = 1 << 14;
-	
+	char *fname = NULL;
+
 	mxt_power_block(POWERLOCK_SYSFS);
 
 	ref_buf = kzalloc(write_page, GFP_KERNEL);
@@ -4813,7 +4964,12 @@ static ssize_t mxt_run_delta_show(struct mxt_data *data, char *buf)
 
 	run_delta_read(data, ref_buf, &len);
 
-	write_file(DELTA_FILE_PATH, ref_buf, 0);
+	if (factory_boot)
+		fname =  DELTA_FILE_PATH_FACTORY;
+	else
+		fname = DELTA_FILE_PATH_NORMAL;
+	write_file(fname, ref_buf, 0);
+	log_file_size_check(fname);
 	msleep(30);
 
 	mxt_power_unblock(POWERLOCK_SYSFS);
@@ -4872,6 +5028,7 @@ static ssize_t mxt_run_rawdata_show(struct mxt_data *data, char *buf)
 	ssize_t ret_len = 0;
 	char *ref_buf = NULL;
 	int write_page = 1 << 14;
+	char *fname = NULL;
 
 	mxt_power_block(POWERLOCK_SYSFS);
 
@@ -4889,29 +5046,36 @@ static ssize_t mxt_run_rawdata_show(struct mxt_data *data, char *buf)
 	}
 
 	run_reference_read(data, ref_buf, &len);
-	
-	write_file(RAWDATA_FILE_PATH, ref_buf, 0);
+
+	if (factory_boot)
+		fname =  RAWDATA_FILE_PATH_FACTORY;
+	else
+		fname = RAWDATA_FILE_PATH_NORMAL;
+	write_file(fname, ref_buf, 0);
+	log_file_size_check(fname);
 	msleep(30);
 
 	mxt_power_unblock(POWERLOCK_SYSFS);
 	if(ref_buf)
 		kfree(ref_buf);
 
-	ret_len += snprintf(buf, PAGE_SIZE, "rawdata is saved to /mnt/sdcard/touch_rawdata.txt\n");
+	ret_len += snprintf(buf, PAGE_SIZE, "rawdata is saved to %s", fname);
 	return ret_len;
 }
 
 static ssize_t mxt_run_self_diagnostic_show(struct mxt_data *data, char *buf)
 {
+#if 0 /* remove unused variable */
 	int i = 0;
+#endif
 	int len = 0;
 	ssize_t info_len = 0;
 	ssize_t ref_len = 0;
 	char *ref_buf = NULL;
 	bool chstatus_result = 1;
 	bool rawdata_result = 1;
-
 	int write_page = 1 << 14;
+	char *fname = NULL;
 
 	mxt_power_block(POWERLOCK_SYSFS);
 
@@ -4937,9 +5101,10 @@ static ssize_t mxt_run_self_diagnostic_show(struct mxt_data *data, char *buf)
 		return 0;
 	}
 
+#if 0 /* remove unused variable */
 	/* allocation of full_cap */
 	data->full_cap = NULL;
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	data->full_cap = (int **)kzalloc(data->channel_size.size_x * sizeof(int *), GFP_KERNEL);
 	if(!data->full_cap)
 	{
@@ -4964,24 +5129,34 @@ static ssize_t mxt_run_self_diagnostic_show(struct mxt_data *data, char *buf)
 		data->full_cap[i] = kzalloc(data->info->matrix_ysize * sizeof(int), GFP_KERNEL);
 	}
 #endif
-	write_file(SELF_DIAGNOSTIC_FILE_PATH, buf, 1);
+#endif
+
+	if (factory_boot)
+		fname = SELF_DIAGNOSTIC_FILE_PATH_FACTORY;
+	else
+		fname = SELF_DIAGNOSTIC_FILE_PATH_NORMAL;
+	write_file(fname, buf, 1);
+	log_file_size_check(fname);
 	msleep(30);
 	len += mxt_info_show(data, buf);
 	len += snprintf(buf + len, PAGE_SIZE - len, "=======RESULT========\n");
 	info_len = (ssize_t)len;
 	len = mxt_selftest(data, buf, len);
-	write_file(SELF_DIAGNOSTIC_FILE_PATH, buf, 0);
+	write_file(fname, buf, 0);
+	log_file_size_check(fname);
 	msleep(30);
 	run_reference_read(data, ref_buf, &ref_len);
-	write_file(SELF_DIAGNOSTIC_FILE_PATH, ref_buf, 0);
+	write_file(fname, ref_buf, 0);
+	log_file_size_check(fname);
 	msleep(30);
 //	Do not use this function to avoid Watch dog.
 //	mxt_get_cap_diff(data);
 
 	kfree(ref_buf);
 
+#if 0 /* remove unused variable */
 	if (data->full_cap != NULL) {
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 		for(i = 0; i < data->channel_size.size_x; i++) {
 #else
 		for(i = 0; i < data->info->matrix_xsize; i++) {
@@ -4992,6 +5167,7 @@ static ssize_t mxt_run_self_diagnostic_show(struct mxt_data *data, char *buf)
 		kfree((int*)data->full_cap);
 		data->full_cap = NULL;
 	}
+#endif
 
 	if ((data->self_test_status[0] == 0x01) || (data->self_test_status[0] == 0x02))
 		chstatus_result = 0;
@@ -5097,7 +5273,7 @@ static void mxt_lpwg_enable(struct mxt_data *data, u32 value)
 	object = mxt_get_object(data, MXT_PROCI_TOUCH_SEQUENCE_LOGGER_T93);
 	if (!object)
 		return;
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	if (data->suspended && cradle_smart_cover_status()) {
 #else
 	if (data->suspended && gpio_get_value(HALL_IC_GPIO)) {
@@ -5328,7 +5504,9 @@ static void atmel_ts_lpwg_update_all(struct i2c_client* client, u32 code, u32* v
 	else if(data->screen) { // Screen On
 		touch_disable_irq(data->irq);
 		touch_disable_irq_wake(data->irq);
-
+		if(data->regulator_status == 0) {
+			mxt_regulator_enable(data);
+		}
 		mxt_active_mode_start(data);
 
 		touch_enable_irq(data->irq);
@@ -5477,10 +5655,7 @@ static ssize_t store_lpwg_notify(struct mxt_data *data, const char *buf, size_t 
 	int type = 0;
 	int value[4] = {0};
 
-	if (mutex_is_locked(&i2c_suspend_lock)) {
-		TOUCH_DEBUG_MSG("%s mutex_is_locked \n", __func__);
-	}
-
+	mutex_lock(&lpwg_lock);
 	sscanf(buf, "%d %d %d %d %d", &type, &value[0], &value[1], &value[2], &value[3]);
 	TOUCH_INFO_MSG("%s : %d %d %d %d %d\n", __func__, type, value[0], value[1], value[2], value[3]);
 
@@ -5516,6 +5691,7 @@ static ssize_t store_lpwg_notify(struct mxt_data *data, const char *buf, size_t 
 	default:
 		break;
 		}
+	mutex_unlock(&lpwg_lock);
 	return count;
 }
 #endif
@@ -6003,6 +6179,14 @@ static void mxt_start(struct mxt_data *data)
 	}
 #endif
 
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+	if (data->lpwg_mode) {
+		int temp_mode = 0;
+		temp_mode = check_current_temp_mode(touch_current_temp);
+		select_temp_event_knock_on(temp_mode, 0);
+	}
+#endif
+
 	mxt_reset_slots(data);
 	data->suspended = false;
 	data->button_lock = false;
@@ -6039,6 +6223,11 @@ static void mxt_stop(struct mxt_data *data)
 	if (data->lpwg_mode) {
 #else
 	if (data->mxt_knock_on_enable) {
+#endif
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+		int temp_mode = 0;
+		temp_mode = check_current_temp_mode(touch_current_temp);
+		select_temp_event_knock_on(temp_mode, 1);
 #endif
 		touch_enable_irq(data->irq);
 		touch_enable_irq_wake(data->irq);
@@ -6113,8 +6302,10 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 		pdata->numtouch = temp_val;
 		TOUCH_DEBUG_MSG("DT : numtouch = %d\n", pdata->numtouch);
 	}
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
 	if(lge_bd_rev > HW_REV_B) {
+#endif
 		rc = of_property_read_string(node, "atmel,fw_name_lgd",  &pdata->fw_name_lgd);
 		if (rc && (rc != -EINVAL)) {
 			TOUCH_ERR_MSG("DT : atmel,fw_name_lgd error \n");
@@ -6138,6 +6329,7 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 		} else {
 			TOUCH_DEBUG_MSG("DT : fw_name : %s \n", pdata->fw_name);
 		}
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
 	}
 	else {
 		rc = of_property_read_string(node, "atmel,fw_name_gf2",  &pdata->fw_name_gf2);
@@ -6156,6 +6348,7 @@ static int mxt_parse_dt(struct device *dev, struct mxt_platform_data *pdata)
 			TOUCH_DEBUG_MSG("DT : fw_name_ogs : %s \n", pdata->fw_name_ogs);
 		}
 	}
+#endif
 #else
 	rc = of_property_read_string(node, "atmel,fw_name",  &pdata->fw_name);
 	if (rc && (rc != -EINVAL)) {
@@ -6817,7 +7010,7 @@ static int mxt_flash_fw_on_probe(struct mxt_fw_info *fw_info)
 	//struct mxt_object *object = NULL;
 	//int ret = 0;
 
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	if(!check_panel)
 		error = 1;
 	else
@@ -7052,7 +7245,7 @@ static int mxt_write_config(struct mxt_fw_info *fw_info)
 	struct mxt_object *object = NULL;
 	struct mxt_cfg_data *cfg_data = NULL;
 	u32 current_crc = 0;
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	u32 t38_cfg_crc = 0;
 	u8 buf_crc_t38[3] = {0};
 #endif
@@ -7084,7 +7277,7 @@ static int mxt_write_config(struct mxt_fw_info *fw_info)
 		return 0;
 	}
 
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
 
 	if(!object) {
@@ -7187,7 +7380,7 @@ static int mxt_write_config(struct mxt_fw_info *fw_info)
 
 	TOUCH_INFO_MSG("Configuration Updated \n");
 
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	TOUCH_DEBUG_MSG("Restore CRC value \n");
 	object = mxt_get_object(data, MXT_SPT_USERDATA_T38);
 
@@ -7340,7 +7533,7 @@ int mxt_update_firmware(struct mxt_data *data, const char *fwname)
 	return 0;
 
 }
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 #define VCOM_30_OGS 		0x30
 #define VCOM_100_OGS 		0x00
 
@@ -7388,6 +7581,7 @@ static int mxt_check_panel_type(struct mxt_data *data)
 		TOUCH_ERR_MSG("Failed to initialize\n");
 		return result;
 	}
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
 	if(lge_bd_rev <= HW_REV_B) {
 		if(panel_type == 0x00) {
 			TOUCH_INFO_MSG("%s get Panel_type GFF2\n", __func__);
@@ -7403,6 +7597,7 @@ static int mxt_check_panel_type(struct mxt_data *data)
 		}
 	}
 	else if(lge_bd_rev >= HW_REV_C) {
+#endif
 		if(vcom_type == VCOM_100_OGS) {
 			data->pdata->fw_name = LGD_VCOM_100_NAME;
 			data->pdata->use_debug_reason = 0;
@@ -7421,7 +7616,9 @@ static int mxt_check_panel_type(struct mxt_data *data)
 			TOUCH_ERR_MSG("%s Error get Panel_type\n", __func__);
 			return result;
 		}
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
 	}
+#endif
 	TOUCH_INFO_MSG("%s  Panel_type:0x%x fw_name:%s\n", __func__, panel_type, data->pdata->fw_name);
 	check_panel = 1;
 	return (int)panel_type;
@@ -7430,18 +7627,18 @@ static int mxt_check_panel_type(struct mxt_data *data)
 static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 {
 	struct mxt_data *data = NULL;
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	struct mxt_object *object = NULL;
 #endif
 	int error = 0;
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	int panel_type = 0;
 #endif
 
 	is_probing = true;
 	TOUCH_INFO_MSG("%s \n", __func__);
 
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	lge_bd_rev = lge_get_board_revno();
 #endif
 
@@ -7450,6 +7647,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	mutex_init(&i2c_suspend_lock);
 	mutex_init(&irq_lock);
+	mutex_init(&lpwg_lock);
 
 	if (!i2c_check_functionality(client->adapter, I2C_FUNC_I2C)) {
 		TOUCH_ERR_MSG("i2c functionality check error\n");
@@ -7505,7 +7703,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		TOUCH_ERR_MSG("Target does not use pinctrl(data->ts_pinctrl == NULL) \n");
 		data->ts_pinctrl = NULL;
 	}
-	
+
 	if (data->ts_pinctrl) {
 		data->ts_pinset_state_active = pinctrl_lookup_state(data->ts_pinctrl, "pmx_ts_active");
 		if (IS_ERR(data->ts_pinset_state_active))
@@ -7601,7 +7799,8 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		TOUCH_ERR_MSG("%s Failed to allocate memory\n", __func__);
 		goto err_free_pdata;
 	}
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
 	if(lge_bd_rev <= HW_REV_B) {
 		panel_type = mxt_check_panel_type(data);
 		if(panel_type < 0) {
@@ -7616,6 +7815,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 		TOUCH_INFO_MSG("%s  Panel_type:%d fw_name:%s\n", __func__, panel_type, data->pdata->fw_name);
 	}
 	else if(lge_bd_rev >= HW_REV_C) {
+#endif
 		panel_type = mxt_check_panel_type(data);
 		if(panel_type < 0) {
 			TOUCH_ERR_MSG("check_panel_type Fail, check bootloader mode\n");
@@ -7625,7 +7825,9 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 				goto err_free_irq;
 			}
 		}
+#ifndef CONFIG_MACH_MSM8939_ALTEV2_LGU_KR
 	}
+#endif
 #endif
 	if (data->pdata->fw_name) {
 		error = mxt_update_firmware(data, data->pdata->fw_name);
@@ -7700,7 +7902,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	data->ref_chk = 0;
 
-#if 0//def MXT_FACTORY //temporary block 
+#if 0//def MXT_FACTORY //temporary block
 	if (lge_get_boot_mode() != LGE_BOOT_MODE_NORMAL ) {
 		factorymode = true;
 		TOUCH_INFO_MSG("Yes-factory factory = %d\n", factorymode);
@@ -7719,7 +7921,7 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 
 	data->suspended = true;
 	data->enable_reporting = false;
-#ifndef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 	/* Self Reference Check */
 	object = mxt_get_object(global_mxt_data, MXT_SPT_USERDATA_T38);
 
@@ -7788,6 +7990,10 @@ static int mxt_probe(struct i2c_client *client, const struct i2c_device_id *id)
 	}
 #endif
 	trigger_usb_state_from_otg(g_usb_type);
+
+	factory_boot = lge_get_factory_boot();
+	TOUCH_INFO_MSG("factory boot check: %d\n", factory_boot);
+
 	TOUCH_INFO_MSG("%s success \n", __func__);
 	is_probing = false;
 
@@ -7834,6 +8040,7 @@ static int mxt_remove(struct i2c_client *client)
 
 		mutex_destroy(&i2c_suspend_lock);
 		mutex_destroy(&irq_lock);
+		mutex_destroy(&lpwg_lock);
 
 		wake_lock_destroy(&pm_touch_wake_lock);
 		wake_lock_destroy(&touch_wake_lock);
@@ -7841,11 +8048,129 @@ static int mxt_remove(struct i2c_client *client)
 
 	return 0;
 }
+
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+void change_temp_patch_event(int patch_event)
+{
+	if (global_mxt_data != NULL) {
+			TOUCH_INFO_MSG("%s patch event = %d\n", __func__, patch_event);
+			switch(patch_event){
+				case HIGH_TEMP_SET: /*13 or 19*/
+					mxt_patch_event(global_mxt_data, HIGH_TEMP_SET);
+					mxt_patch_event(global_mxt_data, LOW_TEMP_SET);
+					if (global_mxt_data->suspended)
+						mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_SET);
+					else
+						mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_UNSET);
+					break;
+				case HIGH_TEMP_UNSET: /*14 or 20*/
+					mxt_patch_event(global_mxt_data, HIGH_TEMP_UNSET);
+					mxt_patch_event(global_mxt_data, LOW_TEMP_UNSET);
+					mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_UNSET);
+					break;
+				case LOW_TEMP_SET: /*17*/
+					mxt_patch_event(global_mxt_data, LOW_TEMP_SET);
+					if (global_mxt_data->suspended)
+						mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_SET);
+					else
+						mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_UNSET);
+					break;
+				case LOW_TEMP_UNSET: /*18*/
+					mxt_patch_event(global_mxt_data, LOW_TEMP_UNSET);
+					mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_UNSET);
+					break;
+				case LOW_TEMP_KNOCKON_SET: /*19*/
+					mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_SET);
+					break;
+				case LOW_TEMP_KNOCKON_UNSET: /*20*/
+					mxt_patch_event(global_mxt_data, LOW_TEMP_KNOCKON_UNSET);
+					break;
+				default:
+					break;
+			}
+	}
+}
+
+int check_current_temp_mode(int current_temp)
+{
+	int temp_mode = NORMAL_TEMP_MODE;
+
+	if (current_temp >= HIGH_TEMP_SET_LEVEL) {
+		temp_mode = HIGH_TEMP_MODE;
+	} else if (current_temp <= LOW_TEMP_SET_LEVEL) {
+		temp_mode = LOW_TEMP_MODE;
+	} else {
+		temp_mode = NORMAL_TEMP_MODE;
+	}
+	return temp_mode;
+}
+
+void select_temp_event(int temp_mode)
+{
+	int patch_event = 0;
+
+	if (touch_previous_temp_mode == NORMAL_TEMP_MODE
+			&& temp_mode == HIGH_TEMP_MODE) {
+		patch_event = HIGH_TEMP_SET;
+	} else if (touch_previous_temp_mode == NORMAL_TEMP_MODE
+			&& temp_mode == LOW_TEMP_MODE) {
+		patch_event = LOW_TEMP_SET;
+	} else if (touch_previous_temp_mode == HIGH_TEMP_MODE
+			&& temp_mode == NORMAL_TEMP_MODE) {
+		patch_event = HIGH_TEMP_UNSET;
+	} else if (touch_previous_temp_mode == LOW_TEMP_MODE
+			&& temp_mode == NORMAL_TEMP_MODE) {
+		patch_event = LOW_TEMP_UNSET;
+	}
+	if (patch_event)
+		change_temp_patch_event(patch_event);
+
+	touch_previous_temp_mode = temp_mode;
+	TOUCH_INFO_MSG("%s temp_mode = %d, patch_event = %d\n", __func__, temp_mode, patch_event);
+}
+
+void select_temp_event_knock_on(int temp_mode, int lpwg_mode)
+{
+	int patch_event = 0;
+
+	if (temp_mode == LOW_TEMP_MODE || temp_mode == HIGH_TEMP_MODE) {
+		if (lpwg_mode) {
+			patch_event = LOW_TEMP_KNOCKON_SET;
+		} else {
+			patch_event = LOW_TEMP_KNOCKON_UNSET;
+		}
+	}
+	if (patch_event)
+		change_temp_patch_event(patch_event);
+
+	TOUCH_INFO_MSG("%s temp_mode = %d, lpwg_mode = %d,  patch_event = %d\n", __func__, temp_mode, lpwg_mode, patch_event);
+}
+
+void trigger_touch_temp(int temp)
+{
+	int temp_mode= 0;
+	bool is_changed = false;
+	TOUCH_INFO_MSG("%s temp = %d\n", __func__, temp);
+
+	if (touch_current_temp != temp)
+		is_changed = true;
+
+	if (is_changed) {
+		temp_mode = check_current_temp_mode(temp);
+		select_temp_event(temp_mode);
+		touch_current_temp = temp;
+	}
+}
+#endif
+
 static int mxt_suspend(struct device *dev)
 {
 	struct mxt_data *data = dev_get_drvdata(dev);
 	if(!is_probing) {
 		TOUCH_INFO_MSG("%s int status:%d\n", __func__, gpio_get_value(data->pdata->gpio_int));
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+		trigger_touch_temp(bq24296_get_batt_temp_origin()/10);
+#endif
 		data->pm_state = PM_SUSPEND;
 	}
 	return 0;

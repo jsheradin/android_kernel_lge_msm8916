@@ -48,8 +48,6 @@
 #define MAX_BRIGHTNESS_LM3632                    0x7FF
 #define MIN_BRIGHTNESS_LM3632                    0x05
 #define DEFAULT_BRIGHTNESS                       0x5F5
-#define PROXY_FAR 1
-#define PROXY_NEAR 0
 #else
 #define MAX_BRIGHTNESS_LM3632                    0xFF
 #define MIN_BRIGHTNESS_LM3632                    0x05
@@ -62,10 +60,6 @@
 
 /* LGE_CHANGE  - To turn backlight on by setting default brightness while kernel booting */
 #define BOOT_BRIGHTNESS 1
-
-#if defined(CONFIG_TOVIS_PH1SYNAP_INCELL_VIDEO_HD_PANEL)
-extern int get_display_id(void);
-#endif
 
 #if defined(LM3632_FLED_EN)
 static struct msm_camera_i2c_client lm3632_flash_i2c_client = {
@@ -102,6 +96,8 @@ static int cur_main_lcd_level = DEFAULT_BRIGHTNESS;
 static int saved_main_lcd_level = DEFAULT_BRIGHTNESS;
 static int backlight_status = POWER_OFF;
 static int lm3632_pwm_enable;
+static int lm3632_bl_ramp_time = -1;
+
 static struct lm3632_device *main_lm3632_dev;
 extern int mfts_lpwg;
 
@@ -306,25 +302,9 @@ void lm3632_dsv_output_ctrl(int enable)
 	}
 
 	if (enable == 1) {
-#if defined(CONFIG_TOVIS_PH1SYNAP_INCELL_VIDEO_HD_PANEL)
-		if(get_display_id()) { // TD4100
-			lm3632_write_reg(main_lm3632_dev->client, 0x0E, 0x1E); // Set VPOS +5.5V
-			lm3632_write_reg(main_lm3632_dev->client, 0x0F, 0x1E); // Set VNEG -5.5V
-
-			lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x04); // VPOS_EN
-			mdelay(10);
-			lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x06); // VPOS_EN + VNEG_EN
-			mdelay(10);
-		} else { // DB7400
-			lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x04);
-			mdelay(2);
-			lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x06);
-		}
-#else
 		lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x04);
 		mdelay(2);
 		lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x06);
-#endif
 	}
 	else {
 #if defined(CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
@@ -335,11 +315,10 @@ void lm3632_dsv_output_ctrl(int enable)
 	}
 }
 #elif IS_ENABLED(CONFIG_LGE_DISPLAY_CODE_REFACTORING)
-extern int proxy_sensor_status;
 static int lm3632_read_reg(struct i2c_client *client, u8 reg, u8 *buf);
 void lm3632_dsv_fd_ctrl(int enable)
 {
-	pr_info("%s: DSV FD Toggle to %d\n", __func__, enable);
+	pr_info("#### %s: DSV FD Toggle to %d\n", __func__, enable);
 
 	if (main_lm3632_dev == NULL) {
 		pr_err("%s : lm3632_dev is null ", __func__);
@@ -349,35 +328,20 @@ void lm3632_dsv_fd_ctrl(int enable)
 	if (enable) {
 		if(lge_get_mfts_mode()){
 			if(!mfts_lpwg){
-				pr_info("%s: mfts_lpwg is not set, dsv will be turned on\n", __func__);
 				gpio_set_value((main_lm3632_dev->bl_gpio), 1);
-				mdelay(1);
-				lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x00); // Standby
-				lm3632_write_reg(main_lm3632_dev->client, 0x0D, 0x24); // LCM_VBST 6.3V; MAX(|VSP|, |VSN|)+300mV
-				lm3632_write_reg(main_lm3632_dev->client, 0x0E, 0x28); // VSP 6.0V
-				lm3632_write_reg(main_lm3632_dev->client, 0x0F, 0x28); // VSN -6.0V
-				lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x04); // i2c control VPOS
-				mdelay(2);
-				lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x06); // i2c control VPOS+VNEG
-			}
-		} else {
-			if ( lge_get_boot_mode()==LGE_BOOT_MODE_CHARGERLOGO
-				|| lge_get_mid_mode()==LGE_LAF_MODE_MID || proxy_sensor_status==PROXY_FAR ) {
-				pr_info("%s: dsv_out going to be +-6v\n", __func__);
-				lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x06); // i2c control VPOS+VNEG
 			}
 		}
+		lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x00); // Standby
+		lm3632_write_reg(main_lm3632_dev->client, 0x0D, 0x24); // LCM_VBST 6.3V; MAX(|VSP|, |VSN|)+300mV
+		lm3632_write_reg(main_lm3632_dev->client, 0x0E, 0x28); // VSP 6.0V
+		lm3632_write_reg(main_lm3632_dev->client, 0x0F, 0x28); // VSN -6.0V
+		lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x04); // i2c control VPOS
+		mdelay(2);
+		lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x06); // i2c control VPOS+VNEG
 	} else {
 		if(lge_get_mfts_mode()){
 			if(!mfts_lpwg){
-				pr_info("%s: mfts_lpwg is not set, dsv will be turned off\n", __func__);
 				gpio_set_value((main_lm3632_dev->bl_gpio), 0);
-			}
-		} else {
-			if ( lge_get_boot_mode()==LGE_BOOT_MODE_CHARGERLOGO
-				|| lge_get_mid_mode()==LGE_LAF_MODE_MID || proxy_sensor_status==PROXY_NEAR ) {
-				pr_info("%s: dsv_out going to be hi-z\n", __func__);
-				lm3632_write_reg(main_lm3632_dev->client, 0x0C, 0x00); // Standby
 			}
 		}
 	}
@@ -604,6 +568,16 @@ void lm3632_backlight_on(int level)
 		lm3632_write_reg(main_lm3632_dev->client, 0x09, bl_ctrl);
 #endif
 		pr_info("%s: ON!\n", __func__);
+
+		/* TODO: Only check ramp time. Consider other values in 0x03 register */
+		if(lm3632_bl_ramp_time != -1) {
+			lm3632_read_reg(main_lm3632_dev->client, 0x03, &bl_ctrl);
+			pr_info("%s: read reg 0x03 value : 0x%x\n", __func__, bl_ctrl);
+			bl_ctrl &= ~RAMP_BITS_MASK ;
+			bl_ctrl |= lm3632_bl_ramp_time << RAMP_BIT_SHIFT;
+			pr_info("%s: write reg 0x03 value : 0x%x\n", __func__, bl_ctrl);
+			lm3632_write_reg(main_lm3632_dev->client, 0x03, bl_ctrl);
+		}
 	}
 	mdelay(1);
 
@@ -904,6 +878,11 @@ static int lm3632_parse_dt(struct device *dev,
 	if(rc == -EINVAL)
 		lm3632_pwm_enable = 1;
 
+	rc = of_property_read_u32(np, "lm3632,bl_ramp_time",
+			&lm3632_bl_ramp_time);
+	if(rc == -EINVAL)
+		lm3632_bl_ramp_time = -1;
+
 	rc = of_property_read_u32(np, "lm3632,blmap_size",
 			&pdata->blmap_size);
 
@@ -946,14 +925,15 @@ static int lm3632_parse_dt(struct device *dev,
 	pr_err("%s bl_gpio : %d, dsv_p_gpio : %d, dsv_n_gpio : %d\n",
 			__func__,pdata->bl_gpio, pdata->dsv_p_gpio, pdata->dsv_n_gpio);
 	pr_err("%s max_current: %d, min: %d, "
-			"default: %d, max: %d, pwm : %d , blmap_size : %d\n",
+			"default: %d, max: %d, pwm : %d , blmap_size : %d, bl_ramp_time : %d\n",
 			__func__,
 			pdata->max_current,
 			pdata->min_brightness,
 			pdata->default_brightness,
 			pdata->max_brightness,
 			lm3632_pwm_enable,
-			pdata->blmap_size);
+			pdata->blmap_size,
+			lm3632_bl_ramp_time);
 
 	return rc;
 }

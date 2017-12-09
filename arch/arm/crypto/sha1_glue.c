@@ -44,6 +44,7 @@ static int sha1_init(struct shash_desc *desc)
 
 static int __sha1_update(struct sha1_state *sctx, const u8 *data,
 			 unsigned int len, unsigned int partial)
+
 {
 	unsigned int done = 0;
 
@@ -69,7 +70,7 @@ int sha1_update_arm(struct shash_desc *desc, const u8 *data,
 		    unsigned int len)
 {
 	struct sha1_state *sctx = shash_desc_ctx(desc);
-	unsigned int partial = sctx->count % SHA1_BLOCK_SIZE;
+        unsigned int partial = sctx->count % SHA1_BLOCK_SIZE;
 	int res;
 
 	/* Handle the fast case right here */

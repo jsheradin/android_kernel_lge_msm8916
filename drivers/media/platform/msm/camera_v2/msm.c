@@ -1,4 +1,4 @@
-/* Copyright (c) 2012-2015, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2012-2015, 2017 The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -788,7 +788,7 @@ int msm_post_event(struct v4l2_event *event, int timeout)
 			pr_err("%s :%d v4l2 events not subscribed yet! type(0x%x) id(0x%x)\n",
 				__func__, __LINE__, event->type, event->id);
 			spin_unlock_irqrestore(&vdev->fh_lock, flags);
-			return -EIO;  //-EAGAIN;  HAL to reopen camera repeatedly
+			return -EAGAIN; //-EIO;// don't want HAL to reopen camera repeatedly
 		}
 		spin_unlock_irqrestore(&vdev->fh_lock, flags);
 		if(BIT_ISSET(msm_debug, LGE_DEBUG_BLOCK_POST_EVENT))
@@ -944,10 +944,8 @@ static int msm_open(struct file *filep)
 	BUG_ON(!pvdev);
 
 	/* !!! only ONE open is allowed !!! */
-	if (atomic_read(&pvdev->opened))
+	if (atomic_cmpxchg(&pvdev->opened, 0, 1))
 		return -EBUSY;
-
-	atomic_set(&pvdev->opened, 1);
 
 	spin_lock_irqsave(&msm_pid_lock, flags);
 	msm_pid = get_pid(task_pid(current));

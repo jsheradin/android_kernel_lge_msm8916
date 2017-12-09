@@ -61,12 +61,20 @@ extern int get_lcd_id(void);
 #define I2C_BL_NAME                              "backlight,rt8542"
 #endif
 
+#if defined(CONFIG_LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL)
+#define MAX_BRIGHTNESS_RT8542                    0x7E
+#define MIN_BRIGHTNESS_RT8542                    0x04
+#define DEFAULT_BRIGHTNESS                       0x52
+#define DEFAULT_FTM_BRIGHTNESS                   0x02
+#define UI_MAX_BRIGHTNESS                        0xFF
+#else
 /* Linear BLED Brightness Control - 83%*/
 #define MAX_BRIGHTNESS_RT8542                    0x7D
 #define MIN_BRIGHTNESS_RT8542                    0x04
 #define DEFAULT_BRIGHTNESS                       0x66
 #define DEFAULT_FTM_BRIGHTNESS                   0x02
 #define UI_MAX_BRIGHTNESS                        0xFF
+#endif
 
 #define POWER_OFF		0x00
 #ifdef FLASH_PORTING_TEMP
@@ -224,11 +232,7 @@ static void rt8542_set_main_current_level(struct i2c_client *client, int level)
 	mutex_lock(&dev->bl_mutex);
 
 #ifdef CONFIG_LGE_PM_FACTORY_CABLE
-	if ( ( LGE_BOOT_MODE_QEM_910K == lge_get_boot_mode() || LGE_BOOT_MODE_PIF_910K == lge_get_boot_mode() )
-#ifdef CONFIG_LGE_PM_BATTERY_ID_CHECKER
-		&& ( BATT_ID_UNKNOWN == read_lge_battery_id() )
-#endif
-	){
+	if ( ( LGE_BOOT_MODE_QEM_910K == lge_get_boot_mode() || LGE_BOOT_MODE_PIF_910K == lge_get_boot_mode() ) && ( BATT_ID_UNKNOWN == read_lge_battery_id()) ){
 			pr_err("Set LCD brightness minimum, No Battery or No proper Battery with 910K Cable\n");
 			rt8542_write_reg(client, 0x05, 0x05);
 	} else{
@@ -309,9 +313,9 @@ static void rt8542_set_main_current_level_no_mapping(
 
 	mutex_lock(&main_rt8542_dev->bl_mutex);
 	if (level != 0)
-		rt8542_write_reg(client, 0x03, level);
+		rt8542_write_reg(client, 0x05, level);
 	else
-		rt8542_write_reg(client, 0x00, 0x00);
+		rt8542_write_reg(client, 0x05, 0x00);
 
 	mutex_unlock(&main_rt8542_dev->bl_mutex);
 }
@@ -348,9 +352,12 @@ void rt8542_backlight_on(int level)
 		rt8542_hw_reset();
 		rt8542_write_reg(main_rt8542_dev->client, 0x05, 0x04);
 
-#ifdef CONFIG_MACH_MSM8916_C90NAS_SPR_US
+#if defined(CONFIG_MACH_MSM8916_C90NAS_SPR_US) || defined(CONFIG_MACH_MSM8916_C90_KR)
 		/*OVP(32V),MAX BLED(22.3mA),OCP(1.0A),Boost Frequency(500khz)*/
 		rt8542_write_reg(main_rt8542_dev->client, 0x02, 0x55);
+#elif defined(CONFIG_LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL)
+		/*OVP(32V),MAX BLED(20mA),OCP(1.0A),Boost Frequency(500khz)*/
+		rt8542_write_reg(main_rt8542_dev->client, 0x02, 0x54);
 #else
 		/*OVP(32V),MAX BLED(12.1mA),OCP(1.0A),Boost Frequency(500khz)*/
 		rt8542_write_reg(main_rt8542_dev->client, 0x02, 0x52);
@@ -443,6 +450,10 @@ void rt8542_lcd_backlight_set_level(int level)
 
 	if (level > UI_MAX_BRIGHTNESS)
 		level = UI_MAX_BRIGHTNESS;
+#if defined(CONFIG_LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL)
+	else if (level > 0 && level <= MIN_BRIGHTNESS_RT8542)
+		level = MIN_BRIGHTNESS_RT8542;
+#endif
 
 	printk("%s: level = (%d)\n",  __func__, level);
 
@@ -501,16 +512,17 @@ static ssize_t lcd_backlight_store_level(struct device *dev,
 		struct device_attribute *attr,
 		const char *buf, size_t count)
 {
-	int level;
+	unsigned long  level;
+	int ret;
 	struct i2c_client *client = to_i2c_client(dev);
 
 	if (!count)
 		return -EINVAL;
 
-	level = kstrtoul(buf, 10, NULL);
+	ret = kstrtoul(buf, 10, &level);
 
-	rt8542_set_main_current_level_no_mapping(client, level);
-	pr_info("%s: write %d direct to backlight register\n", __func__, level);
+	rt8542_set_main_current_level_no_mapping(client, (int) level);
+	pr_info("%s: write %lu direct to backlight register\n", __func__, level);
 
 	return count;
 }
@@ -867,6 +879,13 @@ static int rt8542_probe(struct i2c_client *i2c_dev,
 	bl_dev->props.max_brightness = MAX_BRIGHTNESS_RT8542;
 #endif
 
+#ifdef CONFIG_LGE_LCD_OFF_DIMMING
+	if ((lge_get_bootreasoncode() == 0x77665560) || (lge_get_bootreasoncode() == 0x77665561)
+			|| (lge_get_bootreasoncode() == 0x77665562)) {
+		pr_info("%s : lcd dimming mode! set default dimming brightness.\n",__func__);
+		bl_dev->props.brightness = MIN_BRIGHTNESS_RT8542;
+	} else
+#endif
 	bl_dev->props.brightness = DEFAULT_BRIGHTNESS;
 	bl_dev->props.power = FB_BLANK_UNBLANK;
 
@@ -876,6 +895,14 @@ static int rt8542_probe(struct i2c_client *i2c_dev,
 	dev->gpio = pdata->gpio;
 	dev->max_current = pdata->max_current;
 	dev->min_brightness = pdata->min_brightness;
+/* TODO : remove duplicate setting */
+#ifdef CONFIG_LGE_LCD_OFF_DIMMING
+	if ((lge_get_bootreasoncode() == 0x77665560) || (lge_get_bootreasoncode() == 0x77665561)
+			|| (lge_get_bootreasoncode() == 0x77665562)) {
+		pr_info("%s : lcd dimming mode! set default dimming brightness.\n",__func__);
+		dev->default_brightness = MIN_BRIGHTNESS_RT8542;
+	} else
+#endif
 	dev->default_brightness = pdata->default_brightness;
 #if defined(CONFIG_MACH_MSM8916_C30_TRF_US) || defined(CONFIG_MACH_MSM8916_C30C_TRF_US)
 	if(get_lcd_id())

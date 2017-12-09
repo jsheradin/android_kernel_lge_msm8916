@@ -1,4 +1,4 @@
-/* Copyright (c) 2015-2016, The Linux Foundation. All rights reserved.
+/* Copyright (c) 2014-2015, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -3924,19 +3924,6 @@ void wcd_imped_config(struct snd_soc_codec *codec,
 	struct msm8x16_wcd_priv *msm8x16_wcd =
 				snd_soc_codec_get_drvdata(codec);
 
-#ifdef CONFIG_MACH_LGE
-/*
- * On M OS, can NOT measure L/R impedence, and it would like to keep POS_6_DB_DI regardless of impedence of headsets.
- * Also, wcd_imped_config() doesn't work well, because the second parameter, imped, has no data.
- *
- * On N OS, CAN measure L/R impedence because of applying LGE scenario.
- * To keep POS_6_DB_DI like M OS, MUST return right here on N OS
- * It means that dB on WCD analog codec cannot be controlled by L/R impedence of headphones.
- */
-    pr_debug("%s: nothing to do.\n", __func__);
-    return;
-#endif
-
 	value = wcd_get_impedance_value(imped);
 
 	if (value < wcd_imped_val[0]) {
@@ -3956,6 +3943,8 @@ void wcd_imped_config(struct snd_soc_codec *codec,
 		switch (codec_version) {
 		case TOMBAK_1_0:
 		case TOMBAK_2_0:
+			pr_debug("%s: Default gain is set\n", __func__);
+			break;
 		case CONGA:
 			/*
 			 * For 32Ohm load and higher loads, Set 0x19E
@@ -5269,27 +5258,43 @@ static int msm8x16_wcd_device_up(struct snd_soc_codec *codec)
 {
 	struct msm8x16_wcd_priv *msm8x16_wcd_priv =
 		snd_soc_codec_get_drvdata(codec);
+	u32 reg;
 	int ret = 0;
 	dev_dbg(codec->dev, "%s: device up!\n", __func__);
 
 	mutex_lock(&codec->mutex);
 
 	clear_bit(BUS_DOWN, &msm8x16_wcd_priv->status_mask);
+
+	for (reg = 0; reg < ARRAY_SIZE(msm8x16_wcd_reset_reg_defaults);
+			reg++) {
+		if (msm8x16_wcd_reg_readable[reg]) {
+			if (get_codec_version(msm8x16_wcd_priv) != CAJON &&
+					cajon_digital_reg[reg])
+				continue;
+			msm8x16_wcd_write(codec,
+				reg, msm8x16_wcd_reset_reg_defaults[reg]);
+		}
+	}
+
+	if (codec->reg_def_copy) {
+		pr_debug("%s: Update ASOC cache", __func__);
+		kfree(codec->reg_cache);
+		codec->reg_cache = kmemdup(codec->reg_def_copy,
+						codec->reg_size, GFP_KERNEL);
+		if (!codec->reg_cache) {
+			pr_err("%s: Cache update failed!\n", __func__);
+			mutex_unlock(&codec->mutex);
+			return -ENOMEM;
+		}
+	}
+
 	snd_soc_card_change_online_state(codec->card, 1);
 	/* delay is required to make sure sound card state updated */
 	usleep_range(5000, 5100);
 
 	msm8x16_wcd_codec_init_reg(codec);
 	msm8x16_wcd_update_reg_defaults(codec);
-
-	codec->cache_sync = true;
-	snd_soc_cache_sync(codec);
-	codec->cache_sync = false;
-
-	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_INT_EN_SET,
-				MSM8X16_WCD_A_DIGITAL_INT_EN_SET__POR);
-	msm8x16_wcd_write(codec, MSM8X16_WCD_A_DIGITAL_INT_EN_CLR,
-				MSM8X16_WCD_A_DIGITAL_INT_EN_CLR__POR);
 
 	msm8x16_wcd_set_boost_v(codec);
 
@@ -5889,7 +5894,7 @@ static int msm8x16_wcd_spmi_probe(struct spmi_device *spmi)
 	}
 
 
-	dev_dbg(&spmi->dev, "%s(%d):start addr = 0x%pK\n",
+	dev_dbg(&spmi->dev, "%s(%d):start addr = 0x%pa\n",
 		__func__, __LINE__,  &wcd_resource->start);
 
 	if (wcd_resource->start != TOMBAK_CORE_0_SPMI_ADDR)

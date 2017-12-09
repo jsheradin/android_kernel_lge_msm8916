@@ -56,45 +56,6 @@ static struct msm_sensor_power_setting hi553_ff_power_setting[] = {
 		.delay = 1,
 	},
 };
-#elif defined(CONFIG_MSM8916_LGE_M2_CAMERA)
-static struct msm_sensor_power_setting hi553_ff_power_setting[] = {
-	{
-		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_VIO,
-		.config_val = GPIO_OUT_HIGH,
-		.delay = 0,
-	},
-	{
-		.seq_type = SENSOR_VREG,
-		.seq_val = CAM_VANA,
-		.config_val = 0,
-		.delay = 0,
-	},
-	{
-		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_VDIG,
-		.config_val = GPIO_OUT_HIGH,
-		.delay = 0,
-	},
-	{
-		.seq_type = SENSOR_CLK,
-		.seq_val = SENSOR_CAM_MCLK,
-		.config_val = 23880000,
-		.delay = 2,
-	},
-	{
-		.seq_type = SENSOR_GPIO,
-		.seq_val = SENSOR_GPIO_RESET,
-		.config_val = GPIO_OUT_HIGH,
-		.delay = 2,
-	},
-	{
-		.seq_type = SENSOR_I2C_MUX,
-		.seq_val = 0,
-		.config_val = 0,
-		.delay = 1,
-	},
-};
 #else
 static struct msm_sensor_power_setting hi553_ff_power_setting[] = {
 	{

@@ -63,6 +63,10 @@ static int wakeup_by_swipe = 0;
 extern int lockscreen_stat;
 #endif
 
+#if defined(CONFIG_MACH_MSM8916_M216N_KR) || defined(CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
+extern void rt8542_backlight_off(void);
+extern void rt8542_backlight_on(int level);
+#endif
 
 /****************************************************************************
 * Extern Function Prototypes
@@ -479,7 +483,7 @@ static ssize_t store_openshort(TouchDriverData *pDriverData, const char *buf, si
 	if (count > NAME_BUFFER_SIZE)
 		return count;
 
-	if (sscanf(buf, "%127s", cmd) != 1)
+	if (sscanf(buf, "%s", cmd) != 1)
 		return -EINVAL;
 
 	if (strlen(buf) < 254) {
@@ -546,7 +550,7 @@ static ssize_t store_cmjitter(TouchDriverData *pDriverData, const char *buf, siz
 	if (count > NAME_BUFFER_SIZE)
 		return count;
 
-	if (sscanf(buf, "%127s", cmd) != 1)
+	if (sscanf(buf, "%s", cmd) != 1)
 		return -EINVAL;
 
 	if (strlen(buf) < 254) {
@@ -613,7 +617,7 @@ static ssize_t store_cmdelta(TouchDriverData *pDriverData, const char *buf, size
 	if (count > NAME_BUFFER_SIZE)
 		return count;
 
-	if (sscanf(buf, "%127s", cmd) != 1)
+	if (sscanf(buf, "%s", cmd) != 1)
 		return -EINVAL;
 
 	if (strlen(buf) < 254) {
@@ -680,7 +684,7 @@ static ssize_t store_rawdata(TouchDriverData *pDriverData, const char *buf, size
 	if (count > NAME_BUFFER_SIZE)
 		return count;
 
-	if (sscanf(buf, "%127s", cmd) != 1)
+	if (sscanf(buf, "%s", cmd) != 1)
 		return -EINVAL;
 
 	if (strlen(buf) < 254) {

@@ -203,7 +203,8 @@ static void lm3697_set_main_current_level(struct i2c_client *client, int level)
 		else if (level > max_brightness)
 			level = max_brightness;
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
-		if (flag_mode == LGE_PANEL_MODE_U2){
+		if (flag_mode == LGE_PANEL_MODE_U2)
+		{
 			if (dev->blmap_u2) {
 				if (level < dev->blmap_size) {
 					cal_value = dev->blmap_u2[level];
@@ -218,34 +219,38 @@ static void lm3697_set_main_current_level(struct i2c_client *client, int level)
 				lm3697_write_reg(client, 0x21, cal_value);
 				//lm3697_write_reg(client, 0x23, cal_value);
 			}
-		} else {
+		}
+		else
+		{
 #endif
-			if (dev->blmap) {
-				if (level < dev->blmap_size) {
-					cal_value = dev->blmap[level];
-					pr_debug("%s cal_value %d\n", __func__, cal_value);
-					//cal_value = 0xFF;
-					//pr_info("%s cal_value change to %d\n", __func__, cal_value);
-
-					lm3697_write_reg(client, 0x21, cal_value);
-					//lm3697_write_reg(client, 0x23, cal_value);
-				} else
-					dev_warn(&client->dev, "invalid index %d:%d\n", dev->blmap_size, level);
-			} else {
-				cal_value = level;
+		if (dev->blmap) {
+			if (level < dev->blmap_size) {
+				cal_value = dev->blmap[level];
+				pr_info("%s cal_value %d\n", __func__, cal_value);
+				//cal_value = 0xFF;
+				//pr_info("%s cal_value change to %d\n", __func__, cal_value);
+				
 				lm3697_write_reg(client, 0x21, cal_value);
 				//lm3697_write_reg(client, 0x23, cal_value);
-			}
+			} else
+				dev_warn(&client->dev, "invalid index %d:%d\n", dev->blmap_size, level);
+		} else {
+			cal_value = level;
+			lm3697_write_reg(client, 0x21, cal_value);
+			//lm3697_write_reg(client, 0x23, cal_value);
+		}
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
 		}
 #endif
-	} else {
-		pr_info("%s backlight off level : %d\n", __func__, level);
+	} else
+	{
+		pr_info("%s lm3697_write_reg... off??? level : %d\n", __func__, level);
 		lm3697_write_reg(client, 0x24, 0x00);
 	}
+
 	mutex_unlock(&dev->bl_mutex);
 
-	pr_info("%s : level=%d, cal_value=%d \n", __func__, level, cal_value);
+	pr_info("[LCD][LM3697] %s : backlight level=%d, cal_value=%d \n", __func__, level, cal_value);
 }
 
 static void lm3697_set_main_current_level_no_mapping(
@@ -288,9 +293,9 @@ void lm3697_backlight_on(int level)
 		lm3697_write_reg(main_lm3697_dev->client, 0x1A, 0x00);  //OVP 16V, Freq 500kh
 		lm3697_write_reg(main_lm3697_dev->client, 0x16, 0x00);  //Exponential Mapping Mode
 		lm3697_write_reg(main_lm3697_dev->client, 0x17, 0x13);  //Bank A Full-scale current (20.2mA)
-		lm3697_write_reg(main_lm3697_dev->client, 0x19, 0x01);  //HVLED1 Feedback Enable
-		lm3697_write_reg(main_lm3697_dev->client, 0x10, 0x00);  //HVLED1 enable
 		lm3697_write_reg(main_lm3697_dev->client, 0x24, 0x01);  //Enable Bank A / Disable Bank B
+		lm3697_write_reg(main_lm3697_dev->client, 0x10, 0x00);  //HVLED1 enable
+		lm3697_write_reg(main_lm3697_dev->client, 0x19, 0x01);  //HVLED1 Feedback Enable
 #else
 		lm3697_write_reg(main_lm3697_dev->client, 0x1A, 0x04);	//OVP 32V, Freq 500kh
 		lm3697_write_reg(main_lm3697_dev->client, 0x16, 0x01);	//Linear Mapping Mode

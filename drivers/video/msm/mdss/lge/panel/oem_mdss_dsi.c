@@ -35,34 +35,18 @@
 int panel_not_connected;
 bool first_touch_power_on = false;
 int swipe_status;
-int proxy_sensor_status = 1;
-int lgd_lg4895_lcd_on_off = 1;
+int proxy_sensor_status;
+int lgd_rsp_lcd_on_off = 1;
 int SIC_is_doze =1;
 int jdi_deep_sleep = 0;
 extern int mfts_lpwg;
-extern int lge_get_mode_type(void);
-extern void lm3632_dsv_fd_ctrl(int enable);
-static int lcd_atomic_notifier_callback(struct notifier_block *this,
-					unsigned long event, void *data)
-{
-	int ret = 0;
-	switch (event) {
-	case LCD_EVENT_TOUCH_ESD_DETECTED:
-		pr_err("%s: LCD_EVENT_TOUCH_ESD_DETECTED received\n", __func__);
-		ret = lge_mdss_report_panel_dead();
-		pr_err("%s: LCD_ESD worked and returned %d\n", __func__, ret);
-		break;
-	default:
-		break;
-	}
-	return 0;
-}
-static int lcd_block_notifier_callback(struct notifier_block *this,
+static int lcd_notifier_callback(struct notifier_block *this,
 					unsigned long event, void *data)
 {
 	int mode  = 0;
+	int param;
 	struct mdss_dsi_ctrl_pdata *ctrl_pdata = container_of(this,
-		struct mdss_dsi_ctrl_pdata, block_notif);
+		struct mdss_dsi_ctrl_pdata, notif);
 
 	switch (event) {
 	case LCD_EVENT_TOUCH_DRIVER_REGISTERED:
@@ -73,20 +57,101 @@ static int lcd_block_notifier_callback(struct notifier_block *this,
 		break;
 
 	case LCD_EVENT_TOUCH_PROXY_STATUS:
-		mode = *(u8 *)data;
+		mode = *(int *)(unsigned long) data;
 		switch (mode) {
 		case PROXY_NEAR:
-			pr_err("%s: At PROXY_NEAR event\n", __func__);
-			proxy_sensor_status = PROXY_NEAR;
-			if (lge_get_mode_type()==0) {
-				lm3632_dsv_fd_ctrl(0);
+			if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== LGD_LG4895_INCELL_VID_PANEL) {
+				pr_err("%s: At PROXY_NEAR event\n", __func__);
+			} else if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== LGD_LG4945_INCELL_CMD_PANEL) {
+				if (!ctrl_pdata->ndx || SIC_is_doze == 1)
+					break;
+
+				mdss_dsi_lcd_reset(&(ctrl_pdata->panel_data), 0);
+				mdelay(2);
+				mdss_dsi_lcd_reset(&(ctrl_pdata->panel_data), 1);
+				mdelay(2);
+
+				if (ctrl_pdata->lge_pan_data->clk_off_cmds.cmd_cnt) {
+					pr_err("lge_log %s cmd cnt:%d\n", __func__, ctrl_pdata->lge_pan_data->clk_off_cmds.cmd_cnt);
+					mdss_dsi_stub_cmds_send(ctrl_pdata, &ctrl_pdata->lge_pan_data->clk_off_cmds);
+				}
+//				dw8768_fast_discharge();
+				pr_err("%s: At PROXY_NEAR event clk off, ndx: %d\n", __func__, ctrl_pdata->ndx);
+			} else if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== LGD_INCELL_CMD_PANEL) {
+				proxy_sensor_status = PROXY_NEAR;
+				pr_err("%s: TOUCH_EVENT_PROXY_STATUS received : PROXY_NEAR\n",
+						__func__);
+				if (lgd_rsp_lcd_on_off == 0) {
+					pr_info("%s: LPWG to DEEP\n", __func__);
+					lgd_deep_sleep(ctrl_pdata,
+						LPWG_TO_DEEP_SLEEP,
+						   LPWG_TO_DEEP_SLEEP);
+				}
+			} else if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== JDI_INCELL_CMD_PANEL) {
+				proxy_sensor_status = PROXY_NEAR;
+				pr_err("%s: TOUCH_EVENT_PROXY_STATUS received : PROXY_NEAR\n",
+						__func__);
+				if (lgd_rsp_lcd_on_off == 0) {
+					param = 0;
+					pr_info("%s: LPWG to DEEP\n", __func__);
+					jdi_deep_sleep = 1;
+					touch_notifier_call_chain(
+					LCD_EVENT_TOUCH_SLEEP_STATUS,
+						(void *)&param);
+				}
 			}
 			break;
+
 		case PROXY_FAR:
-			pr_err("%s: At PROXY_FAR event\n", __func__);
-			proxy_sensor_status = PROXY_FAR;
-			if (lge_get_mode_type()==0) {
-				lm3632_dsv_fd_ctrl(1);
+			if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== LGD_LG4895_INCELL_VID_PANEL) {
+				pr_err("%s: At PROXY_FAR event\n", __func__);
+			} else if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== LGD_LG4945_INCELL_CMD_PANEL) {
+				if (!ctrl_pdata->ndx || SIC_is_doze == 1)
+					break;
+
+				mdss_dsi_lcd_reset(&(ctrl_pdata->panel_data), 0);
+				mdelay(2);
+				mdss_dsi_lcd_reset(&(ctrl_pdata->panel_data), 1);
+				mdelay(2);
+
+				if (ctrl_pdata->lge_pan_data->clk_on_cmds.cmd_cnt) {
+					pr_err("lge_log %s cmd cnt:%d\n", __func__, ctrl_pdata->lge_pan_data->clk_on_cmds.cmd_cnt);
+					mdss_dsi_stub_cmds_send(ctrl_pdata, &ctrl_pdata->lge_pan_data->clk_on_cmds);
+				}
+				pr_err("%s: At PROXY_FAR event clk on, ndx: %d\n", __func__, ctrl_pdata->ndx);
+			} else if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== LGD_INCELL_CMD_PANEL) {
+				proxy_sensor_status = PROXY_FAR;
+				pr_err("%s: TOUCH_EVENT_PROXY_STATUS received : PROXY_FAR\n",
+						__func__);
+				if (lgd_rsp_lcd_on_off == 0) {
+					pr_info("%s: DEEP SLEEP to LPWG\n",
+							   __func__);
+					lgd_deep_sleep(ctrl_pdata,
+						DEEP_SLEEP_TO_LPWG,
+						   DEEP_SLEEP_TO_LPWG);
+				}
+			} else if (ctrl_pdata->panel_data.panel_info.lge_pan_info.panel_type
+				== JDI_INCELL_CMD_PANEL) {
+				proxy_sensor_status = PROXY_FAR;
+				pr_err("%s: TOUCH_EVENT_PROXY_STATUS received : PROXY_FAR\n",
+						__func__);
+				if (lgd_rsp_lcd_on_off == 0) {
+					param = 1;
+					pr_info("%s: DEEP SLEEP to LPWG\n",
+							   __func__);
+					jdi_deep_sleep = 0;
+					touch_notifier_call_chain(
+					LCD_EVENT_TOUCH_SLEEP_STATUS,
+						(void *)&param);
+				}
+
 			}
 			break;
 		default:
@@ -309,7 +374,6 @@ int lgd_lg4895_hd_video_msm_dss_enable_vreg(struct mdss_dsi_ctrl_pdata *ctrl_pda
 	if(enable) {
 		if(lge_get_mfts_mode()){
 			if(!mfts_lpwg){
-				gpio_set_value(ctrl_pdata->lge_pan_data->vpnl_en_gpio, 1);
 				gpio_set_value(ctrl_pdata->lge_pan_data->tpvdd_en_gpio, 1);
 			}
 		}
@@ -338,7 +402,6 @@ int lgd_lg4895_hd_video_msm_dss_enable_vreg(struct mdss_dsi_ctrl_pdata *ctrl_pda
 	} else {
 		if(lge_get_mfts_mode()){
 			if(!mfts_lpwg){
-				gpio_set_value(ctrl_pdata->lge_pan_data->vpnl_en_gpio, 0);
 				gpio_set_value(ctrl_pdata->lge_pan_data->tpvdd_en_gpio, 0);
 			}
 		}
@@ -538,12 +601,8 @@ int lgd_qhd_command_mdss_dsi_ctrl_probe(struct platform_device *pdev)
 
 	ctrl_pdata->lge_pan_data->touch_driver_registered = false;
 
-	ctrl_pdata->block_notif.notifier_call = lcd_block_notifier_callback;
-	ctrl_pdata->atomic_notif.notifier_call = lcd_atomic_notifier_callback;
-	if (touch_register_client(&ctrl_pdata->block_notif) != 0)
-		pr_err("Failed to register callback\n");
-
-	if (touch_atomic_notifier_register(&ctrl_pdata->atomic_notif) != 0)
+	ctrl_pdata->notif.notifier_call = lcd_notifier_callback;
+	if (touch_register_client(&ctrl_pdata->notif) != 0)
 		pr_err("Failed to register callback\n");
 
 	return 0;
@@ -584,21 +643,7 @@ int lgd_lg4895_hd_video_dsi_panel_device_register(struct device_node *pan_node,
 		gpio_set_value(ctrl_pdata->lge_pan_data->tpvdd_en_gpio, 1);
 	}
 
-	ctrl_pdata->lge_pan_data->vpnl_en_gpio = of_get_named_gpio(ctrl_pdev->dev.of_node,
-            "qcom,platform-vpnl-en-gpio", 0);
-	if (!gpio_is_valid(ctrl_pdata->lge_pan_data->vpnl_en_gpio)) {
-		pr_err("%s:%d, vpnl_en_gpio(%d) not specified\n",
-				__func__, __LINE__, ctrl_pdata->lge_pan_data->vpnl_en_gpio);
-	} else {
-		// temporally always-on
-		if (gpio_request(ctrl_pdata->lge_pan_data->vpnl_en_gpio, "vpnl_en_gpio")) {
-			pr_err("request vpnl_en gpio failed\n");
-		}
-		gpio_direction_output((ctrl_pdata->lge_pan_data->vpnl_en_gpio), 1);
-		gpio_set_value(ctrl_pdata->lge_pan_data->vpnl_en_gpio, 1);
-	}
-
-	pr_info("%s vpnl_en_gpio = %d\n", __func__, ctrl_pdata->lge_pan_data->vpnl_en_gpio);
+	pr_info("%s tpvdd_en_gpio = %d\n", __func__, ctrl_pdata->lge_pan_data->bkltex_en_gpio);
 
 	return 0;
 }

@@ -166,4 +166,9 @@ struct max17050_platform_data {
 #define MAX17050_V_FOCV				0xFB
 #define MAX17050_SOC_VF				0xFF
 
+
+#ifdef CONFIG_LGE_PM
+bool max17050_i2c_write_and_verify(u8 addr, u16 value);
+#endif
+
 #endif /* __MAX17050_BATTERY_H_ */

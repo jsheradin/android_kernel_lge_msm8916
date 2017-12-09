@@ -122,8 +122,7 @@ enum {
 };
 
 enum {
-	DEV_PM_AWAKE = 0,
-	DEV_PM_RESUME,
+	DEV_PM_RESUME = 0,
 	DEV_PM_SUSPEND,
 	DEV_PM_SUSPEND_IRQ,
 };
@@ -355,7 +354,6 @@ struct touch_operation_role {
 	bool use_lpwg;
 	bool use_firmware;
 	u32 use_lpwg_test;
-	bool hide_coordinate;
 	u32 mfts_lpwg;
 };
 
@@ -456,7 +454,7 @@ struct touch_core_data {
 	u16 old_mask;
 	int tcount;
 	struct touch_data tdata[MAX_FINGER];
-	int is_cancel;
+	int is_palm;
 	struct lpwg_info lpwg;
 	struct tci_ctrl tci;
 
@@ -467,8 +465,6 @@ struct touch_core_data {
 	const char *panel_spec_mfts;
 	const char *panel_spec_mfts_flat;
 	const char *panel_spec_mfts_curved;
-	int jitter_spec;
-	int jitter_avg_spec;
 	u8 force_fwup;
 
 	u8 *tx_buf;

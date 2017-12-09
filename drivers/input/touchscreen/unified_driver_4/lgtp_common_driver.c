@@ -25,9 +25,6 @@
 #include <linux/input/unified_driver_4/lgtp_model_config_misc.h>
 #include <linux/input/unified_driver_4/lgtp_platform_api_misc.h>
 #include <linux/input/unified_driver_4/lgtp_platform_api_i2c.h>
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-#include <linux/input/unified_driver_4/lgtp_device_td4100_ph1.h>
-#endif
 
 /****************************************************************************
 * Local Function Prototypes
@@ -98,11 +95,6 @@ static struct device device_touch = {
 	.release = Device_Touch_Release,
 };
 
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-extern int ph1_tddi_id;
-extern void soft_reset(void);
-extern int force_set;
-#endif
 
 /****************************************************************************
 * Extern Function Prototypes
@@ -329,7 +321,11 @@ static void send_uevent(TouchDriverData *pDriverData, u8 eventIndex)
 		kobject_uevent_env(&device_touch.kobj, KOBJ_CHANGE, touch_uevent[eventIndex]);
 
 		if (eventIndex == UEVENT_KNOCK_ON) {
-			pDriverData->reportData.knockOn = 1;
+            input_report_key(pDriverData->input_dev, KEY_WAKEUP, KEY_PRESSED);
+            input_report_key(pDriverData->input_dev, KEY_WAKEUP, KEY_RELEASED);
+            input_sync(pDriverData->input_dev);
+            TOUCH_LOG("KEY REPORT : KEY_WAKEUP\n");
+            pDriverData->reportData.knockOn = 1;
 		} else if (eventIndex == UEVENT_KNOCK_CODE) {
 			pDriverData->reportData.knockCode = 1;
 		} else if (eventIndex == UEVENT_SWIPE) {
@@ -554,21 +550,6 @@ static void TouchIrqEventHandler(TouchDriverData *pDriverData)
 		TOUCH_ERR("Display IC(DB7400) is Abnormal State !!. Touch IC will be restart\n");
 		release_all_touch_event(pDriverData);
 		lge_mdss_report_panel_dead();
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-		if(ph1_tddi_id == SECOND_MODULE){
-			TouchDisableIrq();
-			soft_reset();
-			msleep(200);
-			if(pDriverData->currState == STATE_NORMAL) {
-				pDeviceControlFunc->InitRegister();
-			} else if(pDriverData->currState == STATE_KNOCK_ON_ONLY || pDriverData->currState == STATE_KNOCK_ON_CODE) {
-				force_set = 1;
-				pDeviceControlFunc->SetLpwgMode(pDriverData->currState, &pDriverData->lpwgSetting);
-			}
-			pDeviceControlFunc->ClearInterrupt();
-			TouchEnableIrq();
-		}
-#endif
 	}
 #endif
 	if (ret == TOUCH_FAIL) {
@@ -754,15 +735,6 @@ static TouchState DecideNextDriverState(LpwgSetting *pLpwgSetting)
 				TOUCH_ERR("Invalid Mode Setting ( mode = %d )\n", pLpwgSetting->mode);
 				nextState = STATE_KNOCK_ON_CODE;
 			}
-
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-			if(ph1_tddi_id == SECOND_MODULE){
-				if(pLpwgSetting->coverState == 1){
-				nextState = STATE_OFF;
-				TOUCH_LOG("Next state set to always off : lcd off & cover closed case\n");
-				}
-			}
-#endif
 		}
 	}
 
@@ -812,10 +784,8 @@ static ssize_t store_lpwg_notify(TouchDriverData *pDriverData, const char *buf, 
 		if(value[1] == 1) pDeviceControlFunc->NotifyHandler(NOTIFY_Q_COVER, value[3]);
 	}
 	#if !defined(ENABLE_HOVER_DETECTION)
-	if (lpwgCmd == LPWG_CMD_CALL) {
-		mutex_unlock(pMutexTouch);
+	if (lpwgCmd == LPWG_CMD_CALL)
 		return count;
-	}
 	#endif
 
 	/* update new lpwg setting */
@@ -836,20 +806,55 @@ static ssize_t store_lpwg_notify(TouchDriverData *pDriverData, const char *buf, 
 	} else {
 		/* store next state to use later ( suspend or resume ) */
 		pDriverData->nextState = nextState;
-
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-		if(ph1_tddi_id == SECOND_MODULE){
-			if( ( pDriverData->currState != STATE_NORMAL ) && ( nextState == STATE_NORMAL )) {
-			TOUCH_LOG("NextState is normal & TD4100 Reset for LCD init. Disable AP IRQ ...\n");
-			TouchDisableIrq();
-			}
-		}
-#endif
 		TOUCH_LOG("LPWG Setting will be processed on suspend or resume\n");
 	}
 	mutex_unlock(pMutexTouch);
 
 	return count;
+}
+
+/* Sysfs - tap_to_wake (Low Power Wake-up Gesture Compatibility device)
+ *
+ * write
+ * 0 : DISABLE
+ * 1 : ENABLE
+ */
+static ssize_t store_tap_to_wake(TouchDriverData *pDriverData, const char *buf, size_t count)
+{
+    LpwgCmd lpwgCmd = LPWG_CMD_MODE;
+    LpwgSetting *pLpwgSetting = NULL;
+    TouchState nextState = STATE_UNKNOWN;
+    
+    int status = 0;
+    int value[1] = {0};
+    
+    sscanf(buf, "%d", &status);
+    value[0] = status;
+    
+    /* load stored previous setting */
+    pLpwgSetting = &pDriverData->lpwgSetting;
+    
+    mutex_lock(pMutexTouch);
+    
+    /* update new lpwg setting */
+    UpdateLpwgSetting(pLpwgSetting, lpwgCmd, value);
+    
+    /* decide next driver state */
+    nextState = DecideNextDriverState(pLpwgSetting);
+    
+    /* apply it using device driver function */
+    //if( ( pDriverData->currState != STATE_NORMAL ) && ( nextState != STATE_NORMAL )){
+        TOUCH_LOG("%s : TAP2WAKE: %s\n", __func__, (status) ? "Enabled" : "Disabled");
+        pDeviceControlFunc->SetLpwgMode(nextState, &pDriverData->lpwgSetting);
+        SetDriverState(pDriverData, nextState);
+    //} else {
+        /* store next state to use later ( suspend or resume ) */
+     //   pDriverData->nextState = nextState;
+     //   TOUCH_LOG("LPWG Setting will be processed on suspend or resume\n");
+    //}
+    mutex_unlock(pMutexTouch);
+    
+    return count;
 }
 
 /****************************************************************************
@@ -1019,12 +1024,6 @@ static ssize_t show_sd_info(TouchDriverData *pDriverData, char *buf)
 	/* TBD : consider in case of LCD Off ( means LPWG mode ) */
 	pDeviceControlFunc->DoSelfDiagnosis(&rawStatus, &channelStatus, pBuf, bufSize, &dataLen);
 	pDeviceControlFunc->Reset();
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-	if(ph1_tddi_id == SECOND_MODULE) {
-		soft_reset();
-		msleep(200);
-	}
-#endif
 	pDeviceControlFunc->InitRegister();
 
 	SetDriverState(pDriverData, STATE_NORMAL);
@@ -1078,31 +1077,12 @@ static ssize_t show_lpwg_sd_info(TouchDriverData *pDriverData, char *buf)
 	/* TBD : consider in case of LCD Off ( means LPWG mode ) */
 	pDeviceControlFunc->DoSelfDiagnosis_Lpwg(&lpwgStatus, pBuf, bufSize, &dataLen);
 	pDeviceControlFunc->Reset();
-#if !defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
 	pDeviceControlFunc->InitRegister();
+
 	SetDriverState(pDriverData, STATE_NORMAL);
-#else
-	if(ph1_tddi_id == SECOND_MODULE) {
-		SetDriverState(pDriverData, STATE_KNOCK_ON_ONLY);
-	} else {
-		pDeviceControlFunc->InitRegister();
-		SetDriverState(pDriverData, STATE_NORMAL);
-	}
-#endif
 
 	pDeviceControlFunc->ClearInterrupt();
-#if !defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
 	TouchEnableIrq();
-#else
-	if(ph1_tddi_id == SECOND_MODULE) {
-		if(!mfts_lpwg)
-			TouchEnableIrq();
-		else
-			TOUCH_LOG("Don't enable Irq (MFTS mode)\n");
-	} else {
-		TouchEnableIrq();
-	}
-#endif
 
 	mutex_unlock(pMutexTouch);
 
@@ -1197,7 +1177,7 @@ static ssize_t store_upgrade(TouchDriverData *pDriverData, const char *buf, size
 	pDriverData->useDefaultFirmware = TOUCH_FALSE;
 
 	memset(pDriverData->fw_image, 0x00, sizeof(pDriverData->fw_image));
-	sscanf(buf, "%255s", pDriverData->fw_image);
+	sscanf(buf, "%s", pDriverData->fw_image);
 
 	queue_delayed_work(touch_wq, &pDriverData->work_upgrade, 0);
 
@@ -1279,6 +1259,7 @@ static ssize_t show_touch_position(TouchDriverData *pDriverData, char *buf)
 static LGE_TOUCH_ATTR(keyguard, S_IRUGO | S_IWUSR, NULL, store_keyguard_info);
 static LGE_TOUCH_ATTR(knock_on_type, S_IRUGO | S_IWUSR, show_knock_on_type, NULL);
 static LGE_TOUCH_ATTR(lpwg_notify, S_IRUGO | S_IWUSR, NULL, store_lpwg_notify);
+static LGE_TOUCH_ATTR(tap_to_wake, S_IRUGO | S_IWUSR, NULL, store_tap_to_wake);
 static LGE_TOUCH_ATTR(lpwg_data, S_IRUGO | S_IWUSR, show_lpwg_data, store_lpwg_data);
 static LGE_TOUCH_ATTR(firmware, S_IRUGO | S_IWUSR, show_firmware, NULL);
 static LGE_TOUCH_ATTR(version, S_IRUGO | S_IWUSR, show_version, NULL);
@@ -1301,6 +1282,7 @@ static struct attribute *lge_touch_attribute_list[] = {
 	&lge_touch_attr_keyguard.attr,
 	&lge_touch_attr_knock_on_type.attr,
 	&lge_touch_attr_lpwg_notify.attr,
+    &lge_touch_attr_tap_to_wake.attr,
 	&lge_touch_attr_lpwg_data.attr,
 	&lge_touch_attr_firmware.attr,
 	&lge_touch_attr_fw_ver.attr,
@@ -1449,6 +1431,8 @@ static int register_input_dev(TouchDriverData *pDriverData)
 
 	set_bit(EV_SYN, pDriverData->input_dev->evbit);
 	set_bit(EV_ABS, pDriverData->input_dev->evbit);
+	set_bit(EV_KEY, pDriverData->input_dev->evbit);
+	set_bit(KEY_WAKEUP, pDriverData->input_dev->keybit);
 	set_bit(INPUT_PROP_DIRECT, pDriverData->input_dev->propbit);
 
 	input_set_abs_params(pDriverData->input_dev, ABS_MT_POSITION_X, 0, pDriverData->mConfig.max_x, 0, 0);
@@ -1518,43 +1502,6 @@ static void SetNextState(int lcdState)
 
 	if(lcdState) queue_delayed_work(touch_wq, &pDriverData->work_init, 0);
 }
-
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1) /* for TD4100 one chip */
-void SetNextState_For_Touch(int lcdState)
-{
-	TouchDriverData *pDriverData = container_of(pWorkTouch,TouchDriverData,work_init);
-	int check_lock = mutex_is_locked(pMutexTouch);
-
-	TOUCH_LOG("SetNextState_For_Touch called\n");
-
-	if(!is_probed){
-		TOUCH_LOG("touch not probed SetNextState_For_Touch \n");
-		return;
-	}
-
-	if (!check_lock)
-		mutex_lock(pMutexTouch);
-
-	if(lcdState == 0){
-		cancel_delayed_work_sync(&pDriverData->work_init);
-		release_all_touch_event(pDriverData);
-	}
-	pDriverData->lpwgSetting.lcdState = lcdState;
-	pDriverData->nextState = DecideNextDriverState(&pDriverData->lpwgSetting);
-	pDeviceControlFunc->SetLpwgMode(pDriverData->nextState, &pDriverData->lpwgSetting);
-	SetDriverState(pDriverData, pDriverData->nextState);
-
-	if(lcdState){
-		release_all_touch_event(pDriverData);
-		pDeviceControlFunc->InitRegister();
-		pDeviceControlFunc->ClearInterrupt();
-		TouchEnableIrq();
-	}
-
-	if (!check_lock)
-		mutex_unlock(pMutexTouch);
-}
-#endif
 
 #if defined(CONFIG_HAS_EARLYSUSPEND)
 
@@ -1645,7 +1592,6 @@ static int touch_fb_notifier_callback(struct notifier_block *self, unsigned long
 			pDriverData->lpwgSetting.mode = 0;
 			pDeviceControlFunc->MftsControl(pDriverData);
            }
-            SetNextState(0);
 #else
            if (lge_get_mfts_mode() && !pDriverData->mfts_lpwg) {
 			TOUCH_DBG("[MFTS] POWER/SENSING OFF\n");
@@ -1655,16 +1601,8 @@ static int touch_fb_notifier_callback(struct notifier_block *self, unsigned long
            }
 	    if (pDriverData->mfts_lpwg)
 			pDriverData->lpwgSetting.mode = 1; // LPWG Mode setting in AAT
-
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-            if(ph1_tddi_id == FIRST_MODULE)
-                SetNextState(0);
-            else
-                TOUCH_DBG("[IN] Skip SetNextState here in case TD4100\n");
-#else
-            SetNextState(0);
-#endif
 #endif /* TOUCH_MODEL_PH1 */
+           SetNextState(0);
            #endif
 		} else if(*blank == FB_BLANK_UNBLANK) {
            #if defined(USE_EARLY_FB_EVENT_UNBLANK)
@@ -1711,21 +1649,14 @@ static int touch_fb_notifier_callback(struct notifier_block *self, unsigned long
 				pDeviceControlFunc->InitRegister();
 				TouchEnableIrq();
 			}
-          SetNextState(1);
 #else
 			if (lge_get_mfts_mode()) {
 				TOUCH_DBG("[MFTS] POWER/SENSING ON\n");
 				TouchEnableIrq();
 			}
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-            if(ph1_tddi_id == FIRST_MODULE)
-                SetNextState(1);
-            else
-                TOUCH_DBG("[OUT] Skip SetNextState here in case TD4100\n");
-#else
-            SetNextState(1);
-#endif
 #endif /* TOUCH_MODEL_PH1 */
+
+            SetNextState(1);
             #endif
 		}
 	}

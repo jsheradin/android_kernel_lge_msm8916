@@ -120,10 +120,6 @@ struct acc_dev {
 
 	/* list of dead HID devices to unregister */
 	struct list_head	dead_hid_list;
-
-#ifdef CONFIG_LGE_USB_G_ANDROID
-	wait_queue_head_t	release_wq;
-#endif
 };
 
 static struct usb_interface_descriptor acc_interface_desc = {
@@ -543,7 +539,7 @@ static int create_bulk_endpoints(struct acc_dev *dev,
 	struct usb_ep *ep;
 	int i;
 
-	DBG(cdev, "create_bulk_endpoints dev: %p\n", dev);
+	DBG(cdev, "create_bulk_endpoints dev: %pK\n", dev);
 
 	ep = usb_ep_autoconfig(cdev->gadget, in_desc);
 	if (!ep) {
@@ -645,7 +641,7 @@ requeue_req:
 		r = -EIO;
 		goto done;
 	} else {
-		pr_debug("rx %p queue\n", req);
+		pr_debug("rx %pK queue\n", req);
 	}
 
 	/* wait for a request to complete */
@@ -668,7 +664,7 @@ copy_data:
 		if (req->actual == 0)
 			goto requeue_req;
 
-		pr_debug("rx %p %u\n", req, req->actual);
+		pr_debug("rx %pK %u\n", req, req->actual);
 		xfer = (req->actual < count) ? req->actual : count;
 		r = xfer;
 		if (copy_to_user(buf, req->buf, xfer))
@@ -800,9 +796,6 @@ static int acc_release(struct inode *ip, struct file *fp)
 
 	WARN_ON(!atomic_xchg(&_acc_dev->open_excl, 0));
 	_acc_dev->disconnected = 0;
-#ifdef CONFIG_LGE_USB_G_ANDROID
-	wake_up(&_acc_dev->release_wq);
-#endif
 	return 0;
 }
 
@@ -952,19 +945,6 @@ err:
 	return value;
 }
 
-#ifdef CONFIG_LGE_USB_G_ANDROID
-void acc_wait_event(void)
-{
-	struct acc_dev *dev = _acc_dev;
-
-	printk(KERN_INFO "acc_wait_event: enter\n");
-	wait_event_timeout(dev->release_wq,
-			!atomic_read(&dev->open_excl), msecs_to_jiffies(2000));
-	printk(KERN_INFO "acc_wait_event: exit\n");
-}
-EXPORT_SYMBOL_GPL(acc_wait_event);
-#endif
-
 static int
 acc_function_bind(struct usb_configuration *c, struct usb_function *f)
 {
@@ -973,7 +953,7 @@ acc_function_bind(struct usb_configuration *c, struct usb_function *f)
 	int			id;
 	int			ret;
 
-	DBG(cdev, "acc_function_bind dev: %p\n", dev);
+	DBG(cdev, "acc_function_bind dev: %pK\n", dev);
 
 	ret = hid_register_driver(&acc_hid_driver);
 	if (ret)
@@ -1135,7 +1115,7 @@ static void acc_hid_work(struct work_struct *data)
 	list_for_each_safe(entry, temp, &new_list) {
 		hid = list_entry(entry, struct acc_hid_dev, list);
 		if (acc_hid_init(hid)) {
-			pr_err("can't add HID device %p\n", hid);
+			pr_err("can't add HID device %pK\n", hid);
 			acc_hid_delete(hid);
 		} else {
 			spin_lock_irqsave(&dev->lock, flags);
@@ -1259,9 +1239,6 @@ static int acc_setup(void)
 	spin_lock_init(&dev->lock);
 	init_waitqueue_head(&dev->read_wq);
 	init_waitqueue_head(&dev->write_wq);
-#ifdef CONFIG_LGE_USB_G_ANDROID
-	init_waitqueue_head(&dev->release_wq);
-#endif
 	atomic_set(&dev->open_excl, 0);
 	INIT_LIST_HEAD(&dev->tx_idle);
 	INIT_LIST_HEAD(&dev->hid_list);

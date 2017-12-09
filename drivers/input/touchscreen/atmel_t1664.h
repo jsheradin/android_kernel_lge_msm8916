@@ -299,6 +299,23 @@
 
 #define HIGH_TEMP_SET      		13
 #define HIGH_TEMP_UNSET 		14
+
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+/*battery temp*/
+#define HIGH_TEMP_SET_LEVEL		55
+#define LOW_TEMP_SET_LEVEL		-13
+
+#define HIGH_TEMP_MODE			1
+#define NORMAL_TEMP_MODE		0
+#define LOW_TEMP_MODE			-1
+
+#define LOW_TEMP_SET			17
+#define LOW_TEMP_UNSET			18
+
+#define LOW_TEMP_KNOCKON_SET	19
+#define LOW_TEMP_KNOCKON_UNSET	20
+#endif
+
 #if 1
 #define PATCH_EVENT_AAT      		15
 #define CHARGER_PLUGGED_AAT 		16
@@ -327,9 +344,16 @@
 #define POWERLOCK_FW_UP		(0x01 << 1)
 #define POWERLOCK_SYSFS		(0x01 << 2)
 
-#define SELF_DIAGNOSTIC_FILE_PATH "/data/touch/touch_self_test.txt"
-#define RAWDATA_FILE_PATH "/data/touch/touch_rawdata.txt"
-#define DELTA_FILE_PATH "/data/touch/touch_delta.txt"
+#define SELF_DIAGNOSTIC_FILE_PATH_FACTORY "/data/touch/touch_self_test.txt"
+#define SELF_DIAGNOSTIC_FILE_PATH_NORMAL  "/sdcard/touch_self_test.txt"
+#define RAWDATA_FILE_PATH_FACTORY "/data/touch/touch_rawdata.txt"
+#define RAWDATA_FILE_PATH_NORMAL  "/sdcard/touch_rawdata.txt"
+#define DELTA_FILE_PATH_FACTORY "/data/touch/touch_delta.txt"
+#define DELTA_FILE_PATH_NORMAL  "/sdcard/touch_delta.txt"
+
+#define MAX_LOG_FILE_SIZE 	(10 * 1024 * 1024) /* 10 M byte */
+#define MAX_LOG_FILE_COUNT 	4
+
 #define SELF_DIAGNOSTIC_STATUS_COMPLETE	0
 #define SELF_DIAGNOSTIC_STATUS_RUNNING	1
 
@@ -867,8 +891,9 @@ struct mxt_data {
 	u8 charging_mode; /*Charger mode in patch*/
 	u8 palm;
 	u16 anti_touch_area;
+#if 0 /* remove unused variable */
 	int **full_cap;
-
+#endif
 	/* qwindow_size */
 	//u8 is_lpwg_report_enable;
 	u8 mxt_multi_tap_enable;

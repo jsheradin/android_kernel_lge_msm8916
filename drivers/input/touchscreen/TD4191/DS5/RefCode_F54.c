@@ -1358,7 +1358,7 @@ int GetRawImageRT78(char *buf)
 	outbuf += snprintf(f54_wlog_buf+outbuf, sizeof(f54_wlog_buf)-outbuf, "\n");
 
 	if (factory_boot)
-		sprintf(file_path, "/data/logger/%s.csv", buf);
+		sprintf(file_path, "/data/touch/%s.csv", buf);
 	else
 		sprintf(file_path, "/sdcard/%s.csv", buf);
 	TOUCH_INFO_MSG("buf = %s, file_path = %s", buf, file_path);

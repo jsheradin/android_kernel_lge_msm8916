@@ -55,88 +55,20 @@
 #define MAX_IMPED 60000
 
 #define WCD_MBHC_BTN_PRESS_COMPL_TIMEOUT_MS  50
+#ifdef CONFIG_MACH_LGE
+char *button_name[4] = {"Hook Key", "Voice Assist", "Volume Up", "Volume Down"};
+#endif
 
 static int det_extn_cable_en;
 module_param(det_extn_cable_en, int,
 		S_IRUGO | S_IWUSR | S_IWGRP);
 MODULE_PARM_DESC(det_extn_cable_en, "enable/disable extn cable detect");
-
 #ifdef CONFIG_MACH_LGE // add switch dev for mbhc
-
-#define LGE_NORMAL_HEADSET_THRESHOLD	100
-#define LGE_ADVANCED_HEADSET_THRESHOLD	400
-
-#define LGE_SWITCH_NAME_NORMAL		"h2w"
-#define LGE_SWITCH_NAME_ADVANCED	"h2w_advanced"
-#define LGE_SWITCH_NAME_AUX			"h2w_aux"
-#define LGE_SWITCH_NAME_AUX_HIDDEN 	"h2w_aux_hidden"
-
-char *button_name[4] = {"Hook Key", "Voice Assist", "Volume Up", "Volume Down"};
-
 enum {
 	NO_DEVICE   = 0,
 	LGE_HEADSET = (1 << 0),
-	LGE_HEADPHONE = (1 << 1),
-	LGE_AUX_HIDDEN = (1 << 6),
+	LGE_HEADSET_NO_MIC = (1 << 1),
 };
-
-static void lge_set_sdev_name(struct wcd_mbhc *mbhc, int status)
-{
-	pr_debug("%s: enter\n", __func__);
-
-	if ((mbhc->mbhc_cfg->detect_extn_cable) && (status == SND_JACK_LINEOUT))
-		mbhc->sdev.name = LGE_SWITCH_NAME_AUX_HIDDEN;
-	else if ((mbhc->zl >= LGE_ADVANCED_HEADSET_THRESHOLD) ||
-		       (mbhc->zr >= LGE_ADVANCED_HEADSET_THRESHOLD))
-		mbhc->sdev.name = LGE_SWITCH_NAME_AUX;
-	else if (mbhc->zr < LGE_NORMAL_HEADSET_THRESHOLD)
-		mbhc->sdev.name = LGE_SWITCH_NAME_NORMAL;
-	else if (mbhc->zr >= LGE_NORMAL_HEADSET_THRESHOLD &&
-				mbhc->zr < LGE_ADVANCED_HEADSET_THRESHOLD)
-		mbhc->sdev.name = LGE_SWITCH_NAME_ADVANCED;
-	else
-		mbhc->sdev.name = LGE_SWITCH_NAME_AUX;
-
-	pr_debug("[LGE MBHC] sdev.name: %s\n", mbhc->sdev.name);
-	pr_debug("%s: leave\n", __func__);
-}
-
-static int lge_set_switch_device(struct wcd_mbhc *mbhc, int status)
-{
-	int result = NO_DEVICE;
-
-	pr_debug("%s: enter. status:0x%x\n", __func__, status);
-
-	status = status & ~SND_JACK_MECHANICAL;
-
-	switch (status) {
-		case 0:
-		case SND_JACK_UNSUPPORTED:
-			break;
-		case SND_JACK_HEADPHONE:
-		case SND_JACK_HEADSET:
-		case SND_JACK_LINEOUT:
-			lge_set_sdev_name(mbhc, status);
-			if ((mbhc->mbhc_cfg->detect_extn_cable) && (status == SND_JACK_LINEOUT)) {
-				result = LGE_AUX_HIDDEN;
-				pr_info("[LGE MBHC] AUX HIDDEN jack is inserted.\n");
-				break;
-				}
-			result = (status == SND_JACK_HEADPHONE || status == SND_JACK_LINEOUT)? LGE_HEADPHONE : LGE_HEADSET;
-			pr_info("[LGE MBHC] %s %s is Inserted. jack_type=0x%x\n",
-						(result-1)?"3 Pin":"4 Pin",
-						(mbhc->zr < LGE_ADVANCED_HEADSET_THRESHOLD)?"Headset":"AUX Cable",
-						status);
-			break;
-		default:
-			pr_err("[LGE MBHC] Unsupported jack type(0x%x) is reported.\n", status);
-			break;
-	}
-
-	pr_debug("[LGE MBHC] sdev state: %d, sdev name: %s\n", result, mbhc->sdev.name);
-	return result;
-}
-
 
 #ifdef CONFIG_LGE_ENABLE_HDSET_MIC_BIAS_FOR_MITS
 static int lge_mbhc_check_factory_boot_mode(void)
@@ -155,8 +87,27 @@ static int lge_mbhc_check_factory_boot_mode(void)
 
     return result;
 }
-#endif	// CONFIG_LGE_ENABLE_HDSET_MIC_BIAS_FOR_MITS
-#endif // CONFIG_MACH_LGE
+#endif
+static ssize_t lge_hsd_print_name(struct switch_dev *sdev, char *buf)
+{
+	switch (switch_get_state(sdev)) {
+		case NO_DEVICE:
+			return sprintf(buf, "No Device");
+		case LGE_HEADSET:
+			return sprintf(buf, "Headset");
+		case LGE_HEADSET_NO_MIC:
+			return sprintf(buf, "Headset");
+		default:
+			break;
+	}
+	return -EINVAL;
+}
+
+static ssize_t lge_hsd_print_state(struct switch_dev *sdev, char *buf)
+{
+	return sprintf(buf, "%d\n", switch_get_state(sdev));
+}
+#endif // add switch dev for mbhc
 
 enum wcd_mbhc_cs_mb_en_flag {
 	WCD_MBHC_EN_CS = 0,
@@ -168,16 +119,32 @@ enum wcd_mbhc_cs_mb_en_flag {
 static void wcd_mbhc_jack_report(struct wcd_mbhc *mbhc,
 				struct snd_soc_jack *jack, int status, int mask)
 {
-	int switch_device = lge_set_switch_device(mbhc, status);
-	pr_debug("%s: status:0x%x, mask:0x%x\n", __func__, status, mask);
-
+	pr_info("[LGE MBHC] %s: status : %d , mask : 0x%x\n", __func__,status,mask);
 	snd_soc_jack_report(jack, status, mask);
-
-	if(status & (SND_JACK_OC_HPHL | SND_JACK_OC_HPHR))
-		pr_err("[LGE MBHC] HPH OCP IRQ(0x%x) is reported.\n", status);
-
-	if ((mask == WCD_MBHC_JACK_MASK) && !(status & (SND_JACK_OC_HPHL | SND_JACK_OC_HPHR)))
-		switch_set_state(&mbhc->sdev, switch_device);
+#ifdef CONFIG_MACH_LGE //LGE Update // add switch dev for mbhc
+	{
+		status = status & ~SND_JACK_MECHANICAL;
+		if(mask == WCD_MBHC_JACK_MASK)
+		{
+			if (status == SND_JACK_HEADPHONE)
+			{
+				switch_set_state(&mbhc->sdev, LGE_HEADSET_NO_MIC);
+			}
+			else if(status == SND_JACK_HEADSET)
+			{
+				switch_set_state(&mbhc->sdev, LGE_HEADSET);
+			}
+			else if(status == 0)
+			{
+				switch_set_state(&mbhc->sdev, NO_DEVICE);
+			}
+			else
+			{
+				pr_debug("%s: not reported to switch_dev\n", __func__);
+			}
+		}
+	}
+#endif // add switch dev for mbhc
 }
 
 static void __hphocp_off_report(struct wcd_mbhc *mbhc, u32 jack_status,
@@ -438,12 +405,17 @@ out_micb_en:
 			  mbhc->is_hs_recording);
 		break;
 	case WCD_EVENT_POST_MICBIAS_2_OFF:
-		if (mbhc->mbhc_cb->set_auto_zeroing)
-			mbhc->mbhc_cb->set_auto_zeroing(codec, false);
-		if (mbhc->mbhc_cb->set_micbias_value)
-			mbhc->mbhc_cb->set_micbias_value(codec);
 		if (!mbhc->mbhc_cb->mbhc_micbias_control)
 			mbhc->is_hs_recording = false;
+		if (mbhc->micbias_enable) {
+			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
+			break;
+		}
+
+		if (mbhc->mbhc_cb->set_auto_zeroing)
+			mbhc->mbhc_cb->set_auto_zeroing(codec, false);
+		if (mbhc->mbhc_cb->set_micbias_value && !mbhc->micbias_enable)
+			mbhc->mbhc_cb->set_micbias_value(codec);
 		/* Enable PULL UP if PA's are enabled */
 		if ((test_bit(WCD_MBHC_EVENT_PA_HPHL, &mbhc->event_state)) ||
 				(test_bit(WCD_MBHC_EVENT_PA_HPHR,
@@ -676,6 +648,10 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(
 						mbhc->codec,
 						MIC_BIAS_2, false);
+			if (mbhc->mbhc_cb->set_micbias_value) {
+				mbhc->mbhc_cb->set_micbias_value(mbhc->codec);
+				WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_MICB_CTRL, 0);
+			}
 			mbhc->micbias_enable = false;
 		}
 
@@ -709,6 +685,12 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 					mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(
 							mbhc->codec,
 							MIC_BIAS_2, false);
+				if (mbhc->mbhc_cb->set_micbias_value) {
+					mbhc->mbhc_cb->set_micbias_value(
+							mbhc->codec);
+					WCD_MBHC_REG_UPDATE_BITS(
+							WCD_MBHC_MICB_CTRL, 0);
+				}
 				mbhc->micbias_enable = false;
 			}
 			mbhc->hph_type = WCD_MBHC_HPH_NONE;
@@ -759,7 +741,6 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 			(mbhc->mbhc_cfg->linein_th != 0)) {
 				mbhc->mbhc_cb->compute_impedance(mbhc,
 						&mbhc->zl, &mbhc->zr);
-#ifndef CONFIG_MACH_LGE
 			if ((mbhc->zl > mbhc->mbhc_cfg->linein_th &&
 				mbhc->zl < MAX_IMPED) &&
 				(mbhc->zr > mbhc->mbhc_cfg->linein_th &&
@@ -779,7 +760,6 @@ static void wcd_mbhc_report_plug(struct wcd_mbhc *mbhc, int insertion,
 				pr_debug("%s: Marking jack type as SND_JACK_LINEOUT\n",
 				__func__);
 			}
-#endif
 		}
 
 		mbhc->hph_status |= jack_type;
@@ -984,7 +964,7 @@ static bool wcd_is_special_headset(struct wcd_mbhc *mbhc)
 		mbhc->mbhc_cb->mbhc_common_micb_ctrl(codec,
 				MBHC_COMMON_MICB_PRECHARGE,
 				false);
-	if (mbhc->mbhc_cb->set_micbias_value)
+	if (mbhc->mbhc_cb->set_micbias_value && !mbhc->micbias_enable)
 		mbhc->mbhc_cb->set_micbias_value(codec);
 	if (mbhc->mbhc_cb->set_auto_zeroing)
 		mbhc->mbhc_cb->set_auto_zeroing(codec, false);
@@ -1043,7 +1023,7 @@ static void wcd_enable_mbhc_supply(struct wcd_mbhc *mbhc,
 			wcd_enable_curr_micbias(mbhc, WCD_MBHC_EN_MB);
 	} else {
 		if (plug_type == MBHC_PLUG_TYPE_HEADSET) {
-			if (mbhc->is_hs_recording)
+			if (mbhc->is_hs_recording || mbhc->micbias_enable)
 				wcd_enable_curr_micbias(mbhc,
 							WCD_MBHC_EN_MB);
 			else if ((test_bit(WCD_MBHC_EVENT_PA_HPHL,
@@ -1101,7 +1081,6 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 	}
 
 	/* Enable HW FSM */
-	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 0); /* Toggle FSM for 3 pole detection issue */
 	WCD_MBHC_REG_UPDATE_BITS(WCD_MBHC_FSM_EN, 1);
 	/*
 	 * Check for any button press interrupts before starting 3-sec
@@ -1128,26 +1107,20 @@ static void wcd_correct_swch_plug(struct work_struct *work)
 			plug_type = MBHC_PLUG_TYPE_INVALID;
 	}
 
-	pr_debug("%s: Valid plug found, plug type is %d\n",
-			 __func__, plug_type);
+#ifdef CONFIG_MACH_LGE 	/* Add to detect apple headset fast & detect AUX cable as 4 pin headset */
+	if (plug_type == MBHC_PLUG_TYPE_HIGH_HPH && (!det_extn_cable_en)) {
+		pr_info("[LGE MBHC] %s: Apple headset or AUX cable is found. Force 4pin Headset. plug_type:0x%x, hs_comp_res;%d\n",
+                __func__, plug_type, hs_comp_res);
 
-#ifdef CONFIG_MACH_LGE
-	if (mbhc->mbhc_cfg->detect_extn_cable == false &&
-			plug_type == MBHC_PLUG_TYPE_HIGH_HPH) {
-#if 0
-		mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(mbhc->codec,
-			MIC_BIAS_2, true);
-#else
 		mbhc->micbias_enable = true;
-#endif
 		plug_type = MBHC_PLUG_TYPE_HEADSET;
 
-		pr_info("[LGE MBHC] %s: HIGH_HPH is detected. Raise MIC Bias2 to 2.7v and report 4-pin headset.\n", __func__);
+		goto report;
 	}
 #endif
 
-
-
+	pr_debug("%s: Valid plug found, plug type is %d\n",
+			 __func__, plug_type);
 	if (plug_type == MBHC_PLUG_TYPE_HEADSET ||
 	    plug_type == MBHC_PLUG_TYPE_HEADPHONE) {
 		WCD_MBHC_RSC_LOCK(mbhc);
@@ -1164,6 +1137,14 @@ correct_plug_type:
 					mbhc->hs_detect_work_stop);
 			wcd_enable_curr_micbias(mbhc,
 						WCD_MBHC_EN_NONE);
+			if (mbhc->micbias_enable) {
+				mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(
+					mbhc->codec, MIC_BIAS_2, false);
+				if (mbhc->mbhc_cb->set_micbias_value)
+					mbhc->mbhc_cb->set_micbias_value(
+							mbhc->codec);
+				mbhc->micbias_enable = false;
+			}
 			goto exit;
 		}
 		if (mbhc->btn_press_intr) {
@@ -1181,6 +1162,14 @@ correct_plug_type:
 					mbhc->hs_detect_work_stop);
 			wcd_enable_curr_micbias(mbhc,
 						WCD_MBHC_EN_NONE);
+			if (mbhc->micbias_enable) {
+				mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(
+					mbhc->codec, MIC_BIAS_2, false);
+				if (mbhc->mbhc_cb->set_micbias_value)
+					mbhc->mbhc_cb->set_micbias_value(
+							mbhc->codec);
+				mbhc->micbias_enable = false;
+			}
 			goto exit;
 		}
 		WCD_MBHC_REG_READ(WCD_MBHC_HS_COMP_RESULT, hs_comp_res);
@@ -1247,32 +1236,10 @@ correct_plug_type:
 		WCD_MBHC_REG_READ(WCD_MBHC_HPHL_SCHMT_RESULT, hphl_sch);
 		WCD_MBHC_REG_READ(WCD_MBHC_MIC_SCHMT_RESULT, mic_sch);
 		if (hs_comp_res && !(hphl_sch || mic_sch)) {
-#ifdef CONFIG_MACH_LGE
-			if (mbhc->mbhc_cfg->detect_extn_cable == false) {
-				if (mbhc->current_plug == MBHC_PLUG_TYPE_HEADSET) {
-					pr_debug("[LGE MBHC] %s: cable is HIGH_HPH in correct-loop. Report 4-pin Headset.\n", __func__);
-#if 0
-					if ((snd_soc_read(mbhc->codec, 0x0623) & 0x3f) != 0x22) {
-						pr_info("[LGE MBHC] %s: Raise mic bias to 2.7v in correct-loop\n", __func__);
-						mbhc->mbhc_cb->mbhc_micb_ctrl_thr_mic(mbhc->codec,
-																MIC_BIAS_2, true);
-					}
-#else
-					mbhc->micbias_enable = true;
-#endif
-					plug_type = MBHC_PLUG_TYPE_HEADSET;
-					if (mbhc->is_hs_recording == true)
-						goto enable_supply;
-					else
-						wrk_complete = false;
-				} else {
-					pr_info("[LGE MBHC] %s: Invalid plug type is detected and then changed to Headset.\n", __func__);
-					plug_type = MBHC_PLUG_TYPE_HEADSET;
-					mbhc->micbias_enable = true;
-					wrk_complete = true;
-				}
-			} else
-				pr_err("[LGE MBHC] %s: extern cables unsupported on M8916.\n", __func__);
+#ifdef CONFIG_MACH_LGE	/* LGE UPDATE : detect as 4Pin and then HIGH_HPH. Force 4Pin Headset */
+			pr_info("[LGE MBHC] detect as 4Pin and then HIGH_HPH. Force 4Pin Headset.\n");
+			plug_type = MBHC_PLUG_TYPE_HEADSET;
+			wrk_complete = false;
 #else	/* Qualcomm Orig. */
 			pr_debug("%s: cable is extension cable\n", __func__);
 			plug_type = MBHC_PLUG_TYPE_HIGH_HPH;
@@ -1891,9 +1858,18 @@ static irqreturn_t wcd_mbhc_btn_press_handler(int irq, void *data)
 				__func__);
 		goto done;
 	}
+#ifndef CONFIG_MACH_LGE	// build error
+	result1 = snd_soc_read(codec, MSM8X16_WCD_A_ANALOG_MBHC_BTN_RESULT);
+	mask = wcd_mbhc_get_button_mask(result1);
 
+	/* [LGE] Do not report btn press except for BTN 0,1,2,3 */
+	if (!mask) {
+		pr_info("[LGE MBHC] Unsupported button event, ignore button press.\n");
+		goto done;
+	}
+#else
 	mask = wcd_mbhc_get_button_mask(mbhc);
-
+#endif
 	mbhc->buttons_pressed |= mask;
 	mbhc->mbhc_cb->lock_sleep(mbhc, true);
 	if (schedule_delayed_work(&mbhc->mbhc_btn_dwork,
@@ -2417,6 +2393,8 @@ int wcd_mbhc_init(struct wcd_mbhc *mbhc, struct snd_soc_codec *codec,
 #ifdef CONFIG_MACH_LGE //LGE Update // add switch dev for mbhc
 		{
 			mbhc->sdev.name = "h2w";
+			mbhc->sdev.print_state = lge_hsd_print_state;
+			mbhc->sdev.print_name = lge_hsd_print_name;
 
 			ret = switch_dev_register(&mbhc->sdev);
 			if (ret < 0) {

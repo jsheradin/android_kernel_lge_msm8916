@@ -52,9 +52,6 @@
 
 #elif defined(TOUCH_MODEL_M2) || defined(TOUCH_MODEL_PH1)
     extern TouchDeviceControlFunction MIT300_Func;
-#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-	extern TouchDeviceControlFunction td4100_Func;
-#endif
 
 #elif defined(TOUCH_DEVICE_S3320)
     extern TouchDeviceControlFunction S3320_Func;
@@ -103,10 +100,6 @@ TouchDeviceControlFunction * TouchGetDeviceControlFunction(int index)
     #elif defined(TOUCH_MODEL_M2) || defined(TOUCH_MODEL_PH1)
     if (index == FIRST_MODULE)
          pControlFunction = &MIT300_Func;
-	#if defined(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1)
-	else if (index == SECOND_MODULE)
-		pControlFunction = &td4100_Func;
-    #endif
 
 	#else
 	#error "Model should be defined"

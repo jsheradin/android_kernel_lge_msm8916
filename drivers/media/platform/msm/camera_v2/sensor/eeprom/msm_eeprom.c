@@ -165,19 +165,22 @@ static int msm_eeprom_config(struct msm_eeprom_ctrl_t *e_ctrl,
 	struct msm_eeprom_cfg_data *cdata =
 		(struct msm_eeprom_cfg_data *)argp;
 	int rc = 0;
+	size_t length = 0;
 
 	CDBG("%s E\n", __func__);
 	switch (cdata->cfgtype) {
 	case CFG_EEPROM_GET_INFO:
 		CDBG("%s E CFG_EEPROM_GET_INFO\n", __func__);
 		cdata->is_supported = e_ctrl->is_supported;
-		/* LGE_CHANG_S, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
-		cdata->position = e_ctrl->position;
-		cdata->AAT_Checksum = e_ctrl->AAT_Checksum;
-		/* LGE_CHANG_E, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
+		length = strlen(e_ctrl->eboard_info->eeprom_name) + 1;
+		if (length > MAX_EEPROM_NAME) {
+			pr_err("%s:%d invalid eeprom name length %d\n",
+				__func__, __LINE__, (int)length);
+			rc = -EINVAL;
+			break;
+		}
 		memcpy(cdata->cfg.eeprom_name,
-			e_ctrl->eboard_info->eeprom_name,
-			sizeof(cdata->cfg.eeprom_name));
+			e_ctrl->eboard_info->eeprom_name, length);
 		break;
 	case CFG_EEPROM_GET_CAL_DATA:
 		CDBG("%s E CFG_EEPROM_GET_CAL_DATA\n", __func__);
@@ -1066,15 +1069,22 @@ static int msm_eeprom_config32(struct msm_eeprom_ctrl_t *e_ctrl,
 {
 	struct msm_eeprom_cfg_data *cdata = (struct msm_eeprom_cfg_data *)argp;
 	int rc = 0;
+	size_t length = 0;
 
 	CDBG("%s E\n", __func__);
 	switch (cdata->cfgtype) {
 	case CFG_EEPROM_GET_INFO:
 		CDBG("%s E CFG_EEPROM_GET_INFO\n", __func__);
 		cdata->is_supported = e_ctrl->is_supported;
+		length = strlen(e_ctrl->eboard_info->eeprom_name) + 1;
+		if (length > MAX_EEPROM_NAME) {
+			pr_err("%s:%d invalid eeprom name length %d\n",
+				__func__, __LINE__, (int)length);
+			rc = -EINVAL;
+			break;
+		}
 		memcpy(cdata->cfg.eeprom_name,
-			e_ctrl->eboard_info->eeprom_name,
-			sizeof(cdata->cfg.eeprom_name));
+			e_ctrl->eboard_info->eeprom_name, length);
 		break;
 	case CFG_EEPROM_GET_CAL_DATA:
 		CDBG("%s E CFG_EEPROM_GET_CAL_DATA\n", __func__);
@@ -1253,15 +1263,6 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 
 	rc = of_property_read_u32(of_node, "qcom,i2c-freq-mode",
 		&eb_info->i2c_freq_mode);
-
-	/* LGE_CHANGE_S, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
-		if (0 > of_property_read_u32(of_node, "qcom,sensor-position",
-		&e_ctrl->position)) {
-		CDBG("%s:%d Default sensor position\n", __func__, __LINE__);
-		e_ctrl->position = 0;
-		}
-		/* LGE_CHANGE_E, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
-
 	if (rc < 0 || (eb_info->i2c_freq_mode >= I2C_MAX_MODES)) {
 		eb_info->i2c_freq_mode = I2C_STANDARD_MODE;
 		CDBG("%s Default I2C standard speed mode.\n", __func__);
@@ -1356,13 +1357,6 @@ static int msm_eeprom_platform_probe(struct platform_device *pdev)
 	}
 #else
 	rc = msm_eeprom_checksum(e_ctrl);
-		/* LGE_CHANGE_S, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
-	    if(rc < 0){
-	    e_ctrl->AAT_Checksum = 0;
-	    }else {
-	    e_ctrl->AAT_Checksum = 1;
-	    }
-        /* LGE_CHANGE_E, Add CRC check code for AAT camera , 2016-02-24, joongeun.choi@lge.com */
 	if (rc) {
 		pr_err("msm_eeprom_checksum failed!!\n");
 	}else{

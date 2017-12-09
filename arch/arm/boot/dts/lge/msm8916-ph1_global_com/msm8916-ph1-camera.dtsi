@@ -10,7 +10,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
-/* PH1 not support proxy
+
 &soc {
     proxy: qcom,proxy@29 {
         cell-index = <0>;
@@ -19,7 +19,7 @@
         qcom,cci-master = <0>;
     };
 };
-*/
+
 &cci {
 	actuator0: qcom,actuator@18 {
 		status = "ok";

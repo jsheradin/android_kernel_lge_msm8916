@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2013-2016, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -454,8 +454,7 @@ static int rmnet_vnd_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 		break;
 
 	default:
-		//TD#80719 remove unnecessary log
-		//LOGH("Unkown IOCTL 0x%08X", cmd);
+		LOGH("Unkown IOCTL 0x%08X", cmd);
 		rc = -EINVAL;
 	}
 

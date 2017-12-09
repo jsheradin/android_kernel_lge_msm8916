@@ -19,6 +19,7 @@
 #define LGE_TOUCH_LG4895_H
 
 #include "touch_lg4895_watch.h"
+#include "touch_lg4895_asc.h"	/* ASC */
 
 /* debug info */
 #define DEBUG_BUF_SIZE 512
@@ -232,7 +233,7 @@ enum {
 #define spr_data_offset		(0x07B)
 #define tc_flash_dn_ctl		(0xC05)
 #define tc_flash_dn_sts		(0x247)
-#define tc_dbg_base_addr	(0x2D4)
+#define tc_dbg_base_addr	(0x2F9)
 #define tc_confdn_base_addr	(0x2F9)
 #define code_access_addr	(0x300)
 #define data_access_addr	(0x301)
@@ -267,7 +268,6 @@ struct lg4895_ic_info {
 	u32 wfr;
 	u32 cg;
 	u32 fpc;
-	u32 lot[4];
 };
 
 struct swipe_info {
@@ -290,6 +290,7 @@ struct lg4895_data {
 	struct kobject kobj;
 	struct lg4895_touch_info info;
 	struct lg4895_ic_info ic_info;
+	struct lg4895_asc_info asc;	/* ASC */
 	u8 lcd_mode;
 	u8 driving_mode;
 	u8 u3fake;
@@ -298,7 +299,6 @@ struct lg4895_data {
 	struct mutex spi_lock;
 	struct delayed_work font_download_work;
 	struct delayed_work fb_notify_work;
-	struct delayed_work BLU_jitter_work;
 	u32 charger;
 	u8 tci_debug_type;
 	u8 swipe_debug_type;
@@ -338,7 +338,6 @@ int lg4895_reg_write(struct device *dev, u16 addr, void *data, int size);
 int lg4895_ic_info(struct device *dev);
 int lg4895_tc_driving(struct device *dev, int mode);
 int lg4895_irq_abs(struct device *dev);
-int lg4895_irq_abs_data(struct device *dev);
 int lg4895_irq_lpwg(struct device *dev);
 int lg4895_irq_handler(struct device *dev);
 int lg4895_check_status(struct device *dev);

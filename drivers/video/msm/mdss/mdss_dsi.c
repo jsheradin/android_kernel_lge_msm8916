@@ -39,10 +39,6 @@ extern void lm3632_dsv_output_ctrl(int enable);
 bool first_power_on = false;
 #endif
 
-#if defined(CONFIG_TOVIS_PH1SYNAP_INCELL_VIDEO_HD_PANEL)
-extern int get_display_id(void);
-#endif
-
 #if defined(CONFIG_TOUCHSCREEN_UNIFIED_DRIVER_3)
 #include <linux/input/unified_driver_3/lgtp_common_notify.h>
 #endif
@@ -335,8 +331,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	}
 #endif
 	for (i = 0; i < DSI_MAX_PM; i++) {
-#if defined (CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL) || \
-	defined (CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
+#if defined (CONFIG_LGD_INCELL_PHASE3_VIDEO_HD_PT_PANEL) || defined (CONFIG_LGD_DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL) || defined (CONFIG_LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL)
 		if (!pdata->panel_info.cont_splash_enabled && (DSI_PANEL_PM == i)){
 #if 0//defined (LGD_INCELL_PHASE3_APPLY_POWER_SEQUENCE)
 		if (gpio_is_valid(ctrl_pdata->rst_gpio)) {
@@ -447,7 +442,7 @@ static int mdss_dsi_panel_power_on(struct mdss_panel_data *pdata)
 	{
 		pr_info("%s: GPIO is not valid!!! (LCD_LDO) \n", __func__);
 	}
-	mdelay(140);
+	msleep(140);
 #elif defined(CONFIG_LGD_INCELL_VIDEO_WVGA_PT_PANEL)
 		gpio_direction_output((ctrl_pdata->disp_fd_gpio), 1);
 		gpio_set_value((ctrl_pdata->disp_fd_gpio), 1);
@@ -756,7 +751,7 @@ static int mdss_dsi_off(struct mdss_panel_data *pdata, int power_state)
 
 	panel_info = &ctrl_pdata->panel_data.panel_info;
 
-	pr_debug("%s+: ctrl=%pK ndx=%d power_state=%d\n",
+	pr_debug("%s: + ctrl=%p ndx=%d power_state=%d\n",
 		__func__, ctrl_pdata, ctrl_pdata->ndx, power_state);
 
 	if (power_state == panel_info->panel_power_state) {
@@ -851,7 +846,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 				panel_data);
 
 	cur_power_state = pdata->panel_info.panel_power_state;
-	pr_debug("%s+: ctrl=%pK ndx=%d cur_power_state=%d\n", __func__,
+	pr_info("%s: + ctrl=%p ndx=%d cur_power_state=%d\n", __func__,
 		ctrl_pdata, ctrl_pdata->ndx, cur_power_state);
 
 	pinfo = &pdata->panel_info;
@@ -949,7 +944,7 @@ int mdss_dsi_on(struct mdss_panel_data *pdata)
 			tmp &= ~(1<<28);
 			MIPI_OUTP((ctrl_pdata->ctrl_base) + 0xac, tmp);
 			wmb();
-		}	
+		}
 	}
 #endif
 	if (mipi->lp11_init) {
@@ -1061,7 +1056,7 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 				panel_data);
 	mipi  = &pdata->panel_info.mipi;
 
-	pr_debug("%s+: ctrl=%pK ndx=%d cur_blank_state=%d\n", __func__,
+	pr_debug("%s+: ctrl=%p ndx=%d cur_blank_state=%d\n", __func__,
 		ctrl_pdata, ctrl_pdata->ndx, pdata->panel_info.blank_state);
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
@@ -1122,7 +1117,7 @@ static int mdss_dsi_blank(struct mdss_panel_data *pdata, int power_state)
 				panel_data);
 	mipi = &pdata->panel_info.mipi;
 
-	pr_debug("%s+: ctrl=%pK ndx=%d power_state=%d\n",
+	pr_info("%s+: ctrl=%p ndx=%d power_state=%d\n",
 		__func__, ctrl_pdata, ctrl_pdata->ndx, power_state);
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
@@ -1208,7 +1203,7 @@ static int mdss_dsi_post_panel_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s+: ctrl=%pK ndx=%d\n", __func__,
+	pr_debug("%s+: ctrl=%p ndx=%d\n", __func__,
 				ctrl_pdata, ctrl_pdata->ndx);
 
 	mdss_dsi_clk_ctrl(ctrl_pdata, DSI_ALL_CLKS, 1);
@@ -1240,7 +1235,7 @@ int mdss_dsi_cont_splash_on(struct mdss_panel_data *pdata)
 	ctrl_pdata = container_of(pdata, struct mdss_dsi_ctrl_pdata,
 				panel_data);
 
-	pr_debug("%s+: ctrl=%pK ndx=%d\n", __func__,
+	pr_debug("%s+: ctrl=%p ndx=%d\n", __func__,
 				ctrl_pdata, ctrl_pdata->ndx);
 
 	WARN((ctrl_pdata->ctrl_state & CTRL_STATE_PANEL_INIT),
@@ -1494,10 +1489,6 @@ static int mdss_dsi_dfps_config(struct mdss_panel_data *pdata, int new_fps)
 		/* left ctrl to get right ctrl */
 		sctrl_pdata = mdss_dsi_get_other_ctrl(ctrl_pdata);
 	}
-
-	ctrl_pdata->dfps_status = true;
-	if (sctrl_pdata)
-		sctrl_pdata->dfps_status = true;
 
 	if (new_fps !=
 		ctrl_pdata->panel_data.panel_info.mipi.frame_rate) {
@@ -1779,6 +1770,12 @@ static int mdss_dsi_event_handler(struct mdss_panel_data *pdata,
 	case MDSS_EVENT_DSI_PANEL_STATUS:
 		if (ctrl_pdata->check_status)
 			rc = ctrl_pdata->check_status(ctrl_pdata);
+#if defined(CONFIG_MACH_MSM8916_C50_VZW)
+		else {
+			printk("%s: check_status not enabled\n", __func__);
+			rc = 1;
+		}
+#endif
 		break;
 	default:
 		pr_debug("%s: unhandled event=%d\n", __func__, event);
@@ -1869,7 +1866,6 @@ static struct device_node *mdss_dsi_find_panel_of_node(
 		if (!dsi_pan_node) {
 			pr_err("%s: invalid pan node, selecting prim panel\n",
 			       __func__);
-			pr_info("%s: Panel Name = %s\n", __func__, panel_name);
 			goto end;
 		}
 		return dsi_pan_node;
@@ -2223,7 +2219,7 @@ int mdss_dsi_retrieve_ctrl_resources(struct platform_device *pdev, int mode,
 		return rc;
 	}
 
-	pr_info("%s: ctrl_base=%pK ctrl_size=%x phy_base=%pK phy_size=%x\n",
+	pr_info("%s: ctrl_base=%p ctrl_size=%x phy_base=%p phy_size=%x\n",
 		__func__, ctrl->ctrl_base, ctrl->reg_size, ctrl->phy_io.base,
 		ctrl->phy_io.len);
 
@@ -2642,8 +2638,12 @@ int dsi_panel_device_register(struct device_node *pan_node,
 		ctrl_pdata->check_status = mdss_dsi_bta_status_check;
 
 	if (ctrl_pdata->status_mode == ESD_MAX) {
+#if defined(CONFIG_MACH_MSM8916_C50_VZW)
+		pr_err("%s: ESD check function not enabled\n", __func__);
+#else
 		pr_err("%s: Using default BTA for ESD check\n", __func__);
 		ctrl_pdata->check_status = mdss_dsi_bta_status_check;
+#endif
 	}
 	if (ctrl_pdata->bklt_ctrl == BL_PWM)
 		mdss_dsi_panel_pwm_cfg(ctrl_pdata);

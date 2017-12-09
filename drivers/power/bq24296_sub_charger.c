@@ -2152,7 +2152,7 @@ static void bq24296_wlc_otg_fake_proc(struct bq24296_chip *chip)
 }
 #endif
 
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_P1BDSN_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && !defined(CONFIG_MACH_MSM8939_P1BDSN_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined (CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined (CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && !defined(CONFIG_MACH_MSM8939_M239DS_GLOBAL_COM)
 static void bq24296_decide_otg_mode(struct bq24296_chip *chip)
 {
@@ -2349,7 +2349,7 @@ static void bq24296_batt_external_power_changed(struct power_supply *psy)
 	chip->usb_psy = _psy_check_ext(chip->usb_psy, _USB_);
 	NULL_CHECK_VOID(chip->usb_psy);
 
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_P1BDSN_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && !defined(CONFIG_MACH_MSM8939_P1BDSN_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined (CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined (CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && !defined(CONFIG_MACH_MSM8939_M239DS_GLOBAL_COM)
 	bq24296_decide_otg_mode(chip);
 #endif

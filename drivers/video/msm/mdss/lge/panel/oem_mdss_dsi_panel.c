@@ -100,6 +100,7 @@ static char *mode_lg4945_dt[] = {
 	"lge,mode-change-cmds-u3-ready",
 	"lge,mode-change-cmds-proximity-u2-to-u3",
 	"lge,mode-change-cmds-proximity-u3-to-u2",
+	"lge,mode-change-cmds-memwrite"
 };
 
 #define EXT_WATCH_LUT_MAX   7
@@ -127,6 +128,15 @@ struct ExtWatchFontPostionConfig {
 	u32	m1x_pos;		/* 1 ~ 9min position */
 	u32	m10x_pos;		/* 10 ~ 50 min position */
 	u32	clx_pos;		/* 1 ~ 60 second position */
+};
+
+struct img_tune_cmds_desc {
+	struct dsi_panel_cmds img_tune_cmds[LGE_PANEL_IMG_TUNE_NUM];
+};
+static struct img_tune_cmds_desc *img_tune_cmds_set;
+static char *img_tune_lg4945_dt[] = {
+	"lge,sharpness-cmds-on",
+	"lge,color_enhancement-cmds-on",
 };
 #endif
 
@@ -236,6 +246,108 @@ static struct device_attribute blmap_adjust_status_attrs[] = {
 #endif
 
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+int lge_lg4945_panel_img_tune_cmd_send(int mode) {
+	struct mdss_dsi_ctrl_pdata *ctrl = NULL;
+	struct mdss_dsi_ctrl_pdata *other = NULL;
+
+	if (pdata_mode == NULL) {
+		pr_err("%s: invalid input data\n", __func__);
+		return -EINVAL;
+	}
+
+	ctrl = container_of(pdata_mode, struct mdss_dsi_ctrl_pdata,
+				panel_data);
+
+	if (img_tune_cmds_set->img_tune_cmds[mode].cmd_cnt) {
+		mdss_dsi_panel_cmds_send(ctrl, &img_tune_cmds_set->img_tune_cmds[mode]);
+		other = mdss_dsi_get_other_ctrl(ctrl);
+		if (other)
+			mdss_dsi_panel_cmds_send(other, &img_tune_cmds_set->img_tune_cmds[mode]);
+		pr_debug("%s: img tune mode %d cmds send\n", __func__, mode);
+	} else {
+		pr_err("%s: img tune %d cmd is empty\n", __func__, mode);
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+static ssize_t sharpness_get(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%x\n", img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[3]);
+}
+
+static ssize_t sharpness_set(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	unsigned int param;
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+
+	sscanf(buf, "%x", &param);
+	img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[3] = param;
+	pr_info("%s: strength=0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X 0x%02X\n", __func__,
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[0].payload[0],
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[0].payload[1],
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[0],
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[1],
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[2],
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[3],
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_SH_ON].cmds[1].payload[4]);
+	lge_lg4945_panel_img_tune_cmd_send(LGE_PANEL_SH_ON);
+
+	return ret;
+}
+
+static ssize_t color_enhancement_get(struct device *dev,
+	struct device_attribute *attr, char *buf)
+{
+	int i=0;
+
+	for(i=0; i<24; i++){
+		sprintf(buf, "%s 0x%02X", buf, img_tune_cmds_set->img_tune_cmds[LGE_PANEL_CE_ON].cmds[2].payload[i]);
+		if(((i+1)%6) == 0)
+			sprintf(buf, "%s \n", buf);
+	}
+
+	return sprintf(buf, "%s\n", buf);
+}
+
+static ssize_t color_enhancement_set(struct device *dev,
+	struct device_attribute *attr, const char *buf, size_t size)
+{
+	ssize_t ret = strnlen(buf, PAGE_SIZE);
+	int set_color_enhancement[128];
+	int i, ie_function;
+
+	memset(set_color_enhancement,0,24*sizeof(int));
+	set_color_enhancement[0] = img_tune_cmds_set->img_tune_cmds[LGE_PANEL_CE_ON].cmds[2].payload[0];
+	sscanf(buf, "%x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x %x",
+		&ie_function,&set_color_enhancement[1],&set_color_enhancement[2],&set_color_enhancement[3],
+		&set_color_enhancement[4],&set_color_enhancement[5],&set_color_enhancement[6],&set_color_enhancement[7],
+		&set_color_enhancement[8],&set_color_enhancement[9],&set_color_enhancement[10],&set_color_enhancement[11],
+		&set_color_enhancement[12],&set_color_enhancement[13],&set_color_enhancement[14],&set_color_enhancement[15],
+		&set_color_enhancement[16],&set_color_enhancement[17],&set_color_enhancement[18],&set_color_enhancement[19],
+		&set_color_enhancement[20],&set_color_enhancement[21],&set_color_enhancement[22],&set_color_enhancement[23]);
+
+	img_tune_cmds_set->img_tune_cmds[LGE_PANEL_CE_ON].cmds[1].payload[1] = ie_function;
+	pr_debug("%s: 0xF0 0x%02X ", __func__, img_tune_cmds_set->img_tune_cmds[LGE_PANEL_CE_ON].cmds[1].payload[1]);
+
+	for(i=0; i<24; i++){
+		img_tune_cmds_set->img_tune_cmds[LGE_PANEL_CE_ON].cmds[2].payload[i] = set_color_enhancement[i];
+		pr_debug("0x%02X ", img_tune_cmds_set->img_tune_cmds[LGE_PANEL_CE_ON].cmds[2].payload[i]);
+	}
+	pr_debug("\n");
+
+	lge_lg4945_panel_img_tune_cmd_send(LGE_PANEL_CE_ON);
+	return ret;
+}
+
+static struct device_attribute panel_tuning_device_attrs[] = {
+	__ATTR(sharpness, 0644, sharpness_get, sharpness_set),
+	__ATTR(color_enhance, 0644, color_enhancement_get, color_enhancement_set),
+};
+
 int lge_lg4945_panel_mode_cmd_send(int switch_cmd, struct mdss_dsi_ctrl_pdata *ctrl) {
 	struct mdss_dsi_ctrl_pdata *other = NULL;
 	if (pdata_mode == NULL) {
@@ -376,8 +488,25 @@ int lgd_lg4895_panel_watch_ctl_cmd_send(int type, void *data, struct mdss_dsi_ct
 		return -EINVAL;
 	}
 
+	if (pdata_mode->panel_info.panel_power_state == 0) {
+		pr_err("%s: Panel off state. Ignore watch control cmd %d\n", __func__, type);
+		return -EINVAL;
+	}
+
+	/*
+	if (data == 0) {
+		pr_err("%s: invalid watch control data. Ignore watch control cmd %d\n", __func__, type);
+		return -EINVAL;
+	}
+	*/
+
 	if (ctrl == NULL) {
 		ctrl = container_of(pdata_mode, struct mdss_dsi_ctrl_pdata, panel_data);
+	}
+
+	if (mdss_dsi_split_display_enabled() && mdss_dsi_is_left_ctrl(ctrl)) {
+		pr_err("%s: dsi control # is not correct\n", __func__);
+		return 0;
 	}
 
 	switch (type) {
@@ -698,6 +827,7 @@ int lgd_lg4895_hd_video_mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int 
 		if (!pinfo->cont_splash_enabled) {
 			/* lm3632_dsv_ctrl */
 			lm3632_dsv_fd_ctrl(1);
+
 			if (ctrl_pdata->lge_pan_data->touch_driver_registered) {
 				rc = touch_notifier_call_chain(LCD_EVENT_HW_RESET, NULL);
 				pr_info("[LCD] notify to touch_driver LCD_EVENT_HW_RESET, rc=%d\n", rc);
@@ -727,7 +857,6 @@ int lgd_lg4895_hd_video_mdss_dsi_panel_reset(struct mdss_panel_data *pdata, int 
 			pr_debug("%s: Reset panel done\n", __func__);
 		}
 	} else {
-		/* lm3632_dsv_ctrl */
 		lm3632_dsv_fd_ctrl(0);
 		if (gpio_is_valid(ctrl_pdata->mode_gpio))
 			gpio_free(ctrl_pdata->mode_gpio);
@@ -884,7 +1013,7 @@ int lgd_lg4895_hd_video_mdss_dsi_panel_bl_ctrl(struct mdss_panel_data *pdata, u3
 
 #if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
 	ctrl_pdata->bklt_ctrl = lge_get_bklt_type();
-	pr_debug("%s: bklt_ctrl=%d\n", __func__, ctrl_pdata->bklt_ctrl);
+	pr_info("%s: bklt_ctrl=%d\n", __func__, ctrl_pdata->bklt_ctrl);
 #endif
 	switch (ctrl_pdata->bklt_ctrl) {
 	case BL_WLED:
@@ -990,6 +1119,11 @@ int lgd_qhd_command_mdss_dsi_panel_init(struct device_node *node, struct mdss_ds
 #endif
 //LGE_UPDATE_E (june1014.lee@lge.com. 2015.03.04). SRE
 
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+	static struct class *panel;
+	static struct device *panel_sysfs_dev;
+#endif
+
 	pinfo = &ctrl_pdata->panel_data.panel_info;
 
 //LGE_UPDATE_S (june1014.lee@lge.com. 2015.03.04). SRE
@@ -1036,7 +1170,32 @@ int lgd_qhd_command_mdss_dsi_panel_init(struct device_node *node, struct mdss_ds
 				}
 			}
 		}
+#endif
 
+//LGE_UPDATE_E (june1014.lee@lge.com. 2015.03.04). SRE
+#if IS_ENABLED(CONFIG_LGE_DISPLAY_AOD_SUPPORT)
+	pinfo->lge_pan_info.lge_panel_send_on_cmd = true;
+	pinfo->lge_pan_info.lge_panel_send_off_cmd = true;
+
+	if (!panel) {
+		panel = class_create(THIS_MODULE, "panel");
+		if (IS_ERR(panel))
+			pr_err("%s: Failed to create panel class\n", __func__);
+	}
+
+	if (!panel_sysfs_dev) {
+		panel_sysfs_dev = device_create(panel, NULL, 0, NULL, "img_tune");
+		if (IS_ERR(panel_sysfs_dev)) {
+			pr_err("%s: Failed to create dev(panel_sysfs_dev)!", __func__);
+		} else {
+			if (device_create_file(panel_sysfs_dev, &panel_tuning_device_attrs[0]) < 0)
+				pr_err("%s: #1 add panel tuning node fail!", __func__);
+			if (device_create_file(panel_sysfs_dev, &panel_tuning_device_attrs[1]) < 0)
+				pr_err("%s: #2 add panel tuning node fail!!", __func__);
+		}
+	}
+#endif
+#if defined(CONFIG_LGE_BLMAP_STORE_MODE)
 	if (pinfo_store_mode == NULL)
 		pinfo_store_mode = pinfo;
 #endif
@@ -1186,6 +1345,15 @@ int lgd_lg4895_hd_video_mdss_panel_parse_dt(struct device_node *np,	struct mdss_
 		pr_info("%s: parse mode_change[%d] cmd = 0x%02x\n", __func__, 
 				i, ((struct mode_cmds_desc*)mode_cmds_set)->mode_cmds[i].cmd_cnt);
 	}
+
+	img_tune_cmds_set = kzalloc(sizeof(struct img_tune_cmds_desc), GFP_KERNEL);
+/*
+	for (i = 0; i < LGE_PANEL_IMG_TUNE_NUM; i++) {
+		mdss_dsi_parse_dcs_cmds(np, &img_tune_cmds_set->img_tune_cmds[i],
+			img_tune_lg4945_dt[i], "qcom,img-tune-control-dsi-state");
+		pr_info("%s: parse img tune %d cmd = 0x%02X \n", __func__, i, img_tune_cmds_set->img_tune_cmds[i].cmds->payload[0]);
+	}
+*/
 	if (pdata_mode == NULL)
 		pdata_mode = &(ctrl_pdata->panel_data);
 #endif
@@ -1319,6 +1487,12 @@ int lgd_qhd_command_mdss_panel_parse_dt(struct device_node *np,	struct mdss_dsi_
 	for (i = 0; i < LGE_PANEL_CMD_CHANGE_NUM; i++) {
 		mdss_dsi_parse_dcs_cmds(np, &mode_cmds_set->mode_cmds[i],
 			mode_lg4945_dt[i], "qcom,mode-control-dsi-state");
+	}
+	img_tune_cmds_set = kzalloc(sizeof(struct img_tune_cmds_desc), GFP_KERNEL);
+	for (i = 0; i < LGE_PANEL_IMG_TUNE_NUM; i++) {
+		mdss_dsi_parse_dcs_cmds(np, &img_tune_cmds_set->img_tune_cmds[i],
+			img_tune_lg4945_dt[i], "qcom,img-tune-control-dsi-state");
+		pr_info("%s: parse img tune %d cmd = 0x%02X \n", __func__, i, img_tune_cmds_set->img_tune_cmds[i].cmds->payload[0]);
 	}
 	if (pdata_mode == NULL)
 		pdata_mode = &(ctrl_pdata->panel_data);

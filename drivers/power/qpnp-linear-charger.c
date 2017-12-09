@@ -1357,7 +1357,6 @@ static int qpnp_lbc_ibatsafe_set(struct qpnp_lbc_chip *chip, int safe_current)
 #define QPNP_LBC_IBATMAX_MIN	90
 #define QPNP_LBC_IBATMAX_MAX	1440
 #ifdef CONFIG_LGE_PM_FACTORY_CABLE
-#define INPUT_CURRENT_LIMIT_FACTORY_EMBEDDED 1000
 #define INPUT_CURRENT_LIMIT_FACTORY 1500
 #define INPUT_CURRENT_LIMIT_USB20   500
 #define INPUT_CURRENT_LIMIT_USB30   900
@@ -1377,25 +1376,18 @@ static int qpnp_lbc_ibatmax_set(struct qpnp_lbc_chip *chip, int chg_current)
 			pr_info("factory cable detected(130k) iBat 500mA\n");
 #if defined(CONFIG_MACH_MSM8916_YG_SKT_KR) \
 	|| defined(CONFIG_MACH_MSM8916_C100N_KR) \
+	|| defined(CONFIG_MACH_MSM8916_M216N_KR) \
 	|| defined(CONFIG_MACH_MSM8916_C100N_GLOBAL_COM) \
 	|| defined(CONFIG_MACH_MSM8916_C100_GLOBAL_COM) \
-	|| defined(CONFIG_MACH_MSM8916_K5)
+	|| defined(CONFIG_MACH_MSM8916_K5) \
+	|| defined(CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
 			chg_current = INPUT_CURRENT_LIMIT_USB30;
 #else
 			chg_current = INPUT_CURRENT_LIMIT_USB20;
 #endif
 		} else {
-#if defined(CONFIG_MACH_MSM8916_K5)
-			if(qpnp_lbc_is_batt_present(chip)) {
-				pr_info("factory cable detected iBat 1000mA\n");
-				chg_current = INPUT_CURRENT_LIMIT_FACTORY_EMBEDDED;
-			}
-			else
-#endif
-			{
-				pr_info("factory cable detected iBat 1500mA\n");
-				chg_current = INPUT_CURRENT_LIMIT_FACTORY;
-			}
+			pr_info("factory cable detected iBat 1500mA\n");
+			chg_current = INPUT_CURRENT_LIMIT_FACTORY;
 		}
 	}
 #endif
@@ -3494,10 +3486,12 @@ static irqreturn_t qpnp_lbc_usbin_valid_irq_handler(int irq, void *_chip)
 
 	usb_present = qpnp_lbc_is_usb_chg_plugged_in(chip);
 #if defined(CONFIG_MACH_MSM8916_YG_SKT_KR) \
+	|| defined(CONFIG_MACH_MSM8916_M216N_KR) \
 	|| defined(CONFIG_MACH_MSM8916_C100N_KR) \
 	|| defined(CONFIG_MACH_MSM8916_C100N_GLOBAL_COM) \
 	|| defined(CONFIG_MACH_MSM8916_C100_GLOBAL_COM) \
-	|| defined(CONFIG_MACH_MSM8916_K5)
+	|| defined(CONFIG_MACH_MSM8916_K5) \
+	|| defined(CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
 	pr_info("usbin-valid triggered: %d\n", usb_present);
 #else
 	pr_debug("usbin-valid triggered: %d\n", usb_present);
@@ -4545,9 +4539,11 @@ static enum alarmtimer_restart vddtrim_callback(struct alarm *alarm,
 }
 #if defined(CONFIG_MACH_MSM8916_YG_SKT_KR) \
 	|| defined(CONFIG_MACH_MSM8916_C100N_KR) \
+        || defined(CONFIG_MACH_MSM8916_M216N_KR) \
 	|| defined(CONFIG_MACH_MSM8916_C100N_GLOBAL_COM) \
 	|| defined(CONFIG_MACH_MSM8916_C100_GLOBAL_COM) \
-	|| defined(CONFIG_MACH_MSM8916_K5)
+	|| defined(CONFIG_MACH_MSM8916_K5) \
+	|| defined(CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
 #define QPNP_DEFAULT_IBAT	900
 #else
 #define QPNP_DEFAULT_IBAT	810
@@ -4875,7 +4871,7 @@ static int qpnp_lbc_main_probe(struct spmi_device *spmi)
 		chip->batt_psy.properties = msm_batt_power_props;
 		chip->batt_psy.num_properties =
 			ARRAY_SIZE(msm_batt_power_props);
-#ifdef CONFIG_LGE_PM_LLK_MODE
+#ifdef 	CONFIG_LGE_PM_LLK_MODE
 	{
 		int qpnp_batt_power_get_property_lge(struct power_supply *psy,
 		       enum power_supply_property psp,
@@ -5193,8 +5189,4 @@ module_exit(qpnp_lbc_exit);
 MODULE_DESCRIPTION("QPNP Linear charger driver");
 MODULE_LICENSE("GPL v2");
 MODULE_ALIAS("platform:" QPNP_CHARGER_DEV_NAME);
-
-#ifdef CONFIG_LGE_PM_LLK_MODE
-#include "lge/qpnp-linear-charger-lge.c"
-#endif
 

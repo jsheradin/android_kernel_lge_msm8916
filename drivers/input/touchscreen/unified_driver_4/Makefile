@@ -24,6 +24,9 @@ ifeq ($(CONFIG_MACH_MSM8939_M239DS_GLOBAL_COM), y)
 obj-y 	+= MIT300/
 endif
 
+ifeq ($(CONFIG_MACH_MSM8916_M216N_KR), y)
+obj-y   += MIT300_M2/
+endif
 ifeq ($(CONFIG_MSM8916_P1C), y)
 obj-y   += MIT300/
 endif
@@ -32,6 +35,6 @@ ifeq ($(CONFIG_TOUCHSCREEN_UNIFIED_MELFAS_MIT300_PH1), y)
 obj-y   += MIT300_PH1/
 endif
 
-ifeq ($(CONFIG_TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1), y)
-obj-y   += td4100_PH1/
+ifeq ($(CONFIG_MACH_MSM8916_M216_GLOBAL_COM), y)
+obj-y   += MIT300_M2/
 endif

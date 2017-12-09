@@ -82,6 +82,21 @@ typedef enum {
 	HW_REV_MKT,
 	HW_REV_MAX
 } hw_rev_type;
+#elif defined (CONFIG_MACH_MSM8916_M216N_KR) || defined(CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
+typedef enum {
+	HW_REV_0 = 0,
+	HW_REV_A,
+	HW_REV_B,
+	HW_REV_C,
+	HW_REV_D,
+	HW_REV_E,
+	HW_REV_F,
+	HW_REV_1_0,
+	HW_REV_1_1,
+	HW_REV_1_2,
+	HW_REV_1_3,
+	HW_REV_MAX
+} hw_rev_type;
 #else
 typedef enum {
 	HW_REV_EVB1 = 0,
@@ -188,10 +203,9 @@ void get_dt_cn_prop_u32(const char *name, uint32_t *u32);
 enum lge_laf_mode_type {
 	LGE_LAF_MODE_NORMAL = 0,
 	LGE_LAF_MODE_LAF,
-	LGE_LAF_MODE_MID,
 };
 enum lge_laf_mode_type lge_get_laf_mode(void);
-enum lge_laf_mode_type lge_get_mid_mode(void);
+
 bool lge_get_mfts_mode(void);
 
 #if defined(CONFIG_LCD_KCAL)

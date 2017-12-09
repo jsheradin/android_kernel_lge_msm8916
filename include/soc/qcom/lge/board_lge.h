@@ -15,6 +15,18 @@ typedef enum {
 	HW_REV_1_1,
 	HW_REV_MAX
 } hw_rev_type;
+#elif defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+typedef enum {
+	HW_REV_0 = 0,
+	HW_REV_A,
+	HW_REV_B,
+	HW_REV_C,
+	HW_REV_D,
+	HW_REV_E,
+	HW_REV_F,
+	HW_REV_1_0,
+	HW_REV_MAX
+} hw_rev_type;
 #else
 typedef enum {
         HW_REV_EVB1 = 0,
@@ -116,7 +128,7 @@ bool lge_get_mfts_mode(void);
 #if defined(CONFIG_LCD_KCAL)
 void __init lge_add_lcd_kcal_devices(void);
 #endif
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && defined(CONFIG_LGE_QFPROM_INTERFACE) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BC_SPR_US)  && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && defined(CONFIG_LGE_QFPROM_INTERFACE) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BC_SPR_US)  && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined(CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined(CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && \
 	!defined(CONFIG_MACH_MSM8939_PH2_GLOBAL_COM)
 void __init lge_add_qfprom_devices(void);
@@ -181,4 +193,9 @@ extern int lge_get_kswitch_status(void);
 
 #endif
 
+#if defined(CONFIG_LGE_QSDL_SUPPORT)
 extern int lge_get_bootreason(void);
+#endif
+#if defined(CONFIG_LGE_LCD_OFF_DIMMING)
+extern int lge_get_bootreasoncode(void);
+#endif

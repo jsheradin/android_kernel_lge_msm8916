@@ -120,7 +120,7 @@ static long msm_sensor_init_subdev_ioctl(struct v4l2_subdev *sd,
 		break;
 	}
 
-	return rc;
+	return 0;
 }
 
 #ifdef CONFIG_COMPAT

@@ -1,5 +1,6 @@
 &mdss_mdp {
 	dsi_lgd_db7400_hd_incell_vid: qcom,mdss_dsi_lgd_incell_db7400_hd_video{
+//		lge,has-dsv;
 		compatible = "qcom,mdss-dsi-panel";
 		status = "disable";
 		qcom,cont-splash-enabled;
@@ -478,9 +479,6 @@
 			00 00 00 00 00 00 00
 			00 00 00 80 00 00 00
 
-			29 01 00 00 00 00 06 /* sharpness_control */
-			81 00 22 00 04 04
-
 			29 01 00 00 00 00 06 /*DB Check need*/
 			F5 00 06 00 00 80
 
@@ -580,38 +578,38 @@
 			18 70 B2 18 70
 
 			39 01 00 00 00 00 42 /*ief 2*/
-			78 59 B0 44 07 9C 60
-			89 0E 98 C0 12 1D 00
-			59 90 85 00 9C 90 89
-			0D 98 60 08 71 00 63
-			60 44 07 9C 50 89 0E
-			18 C0 16 1D 00 4C 18
-			45 07 98 70 89 0E 34
-			E1 0D 1D 00 4C 18 45
-			07 98 70 89 0E 34 E1
-			0D 1D 00
+			78 4D B0 44 07 9A 60
+			89 0E 34 C1 12 1D 00
+			4D B0 44 07 9A 60 89
+			0E 34 C1 12 1D 00 4D
+			B0 44 07 9A 60 89 0E
+			34 C1 12 1D 00 4C B0
+			44 07 98 60 89 0E 30
+			C1 12 1D 00 4D B0 44
+			07 9A 60 89 0E 34 C1
+			12 1D 00
 
 			39 01 00 00 00 00 42 /*ief 3*/
-			79 4D B0 84 0A 9A 60
-			09 0F 30 C1 12 F7 07
-			4D B0 84 0A 9A 60 09
-			0F 30 C1 12 F7 07 4D
-			B0 84 0A 9A 60 09 0F
-			30 C1 12 F7 07 4D B0
-			84 0A 9A 60 09 0F 30
-			C1 12 F7 07 4D B0 84
-			0A 9A 60 09 0F 30 C1
-			12 F7 07
+			79 4D B0 44 07 9A 60
+			89 0E 34 C1 12 1D 00
+			4C B0 44 07 98 60 89
+			0E 30 C1 12 1D 00 4C
+			B0 44 07 98 60 89 0E
+			30 C1 12 1D 00 4C B0
+			44 07 98 60 89 0E 30
+			C1 12 1D 00 4C B0 44
+			07 98 60 89 0E 30 C1
+			12 1D 00
 
 			39 01 00 00 00 00 46 /*ief 4*/
-			7A 4D B0 84 0A 9A 60
-			09 0F 30 C1 12 F7 07
-			4D B0 84 0A 9A 60 09
-			0F 30 C1 F7 07 00 4D
-			B0 84 0A 9A 60 09 0F
-			30 C1 12 F7 07 4D B0
-			84 0A 9A 60 09 0F 30
-			C1 12 F7 07 00 00 00
+			7A 4C B0 44 07 98 60
+			89 0E 30 C1 12 1D 00
+			4C B0 44 07 98 60 89
+			0E 30 C1 12 1D 00 4C
+			B0 44 07 98 60 89 0E
+			30 C1 12 1D 00 4C B0
+			44 07 98 60 89 0E 30
+			C1 12 1D 00 00 00 00
 			00 00 00 00 00 00 00
 			00 00 00 80 00 00 00
 		];
@@ -665,11 +663,13 @@
 
 		qcom,mdss-dsi-on-command-state = "dsi_lp_mode";
 		qcom,mdss-dsi-off-command-state = "dsi_hs_mode";
-		qcom,mdss-dsi-off-command2-state = "dsi_lp_mode";
 		qcom,mdss-dsi-reader_mode-command-state = "dsi_hs_mode";
 		qcom,mdss-dsi-h-sync-pulse = <0>;
 		qcom,mdss-dsi-traffic-mode = "non_burst_sync_event";
 		qcom,mdss-dsi-lane-map = "lane_map_0123";
+		//qcom,mdss-dsi-hfp-power-mode;
+		//qcom,mdss-dsi-hbp-power-mode;
+		//qcom,mdss-dsi-hsa-power-mode;
 		qcom,mdss-dsi-bllp-eof-power-mode;
 		//qcom,mdss-dsi-bllp-power-mode;
 		qcom,mdss-dsi-last-line-interleave;
@@ -679,7 +679,9 @@
 		qcom,mdss-dsi-lane-3-state;
 		qcom,mdss-dsi-panel-timings = [A8 26 1A 00 50 4A 28 2A 3E 03 04 00];
 		qcom,mdss-dsi-t-clk-post = <0x03>;
+
 		qcom,mdss-dsi-t-clk-pre = <0x24>;
+
 		qcom,mdss-dsi-bl-min-level = <1>;
 		qcom,mdss-dsi-bl-max-level = <255>;
 		qcom,mdss-dsi-dma-trigger = "trigger_sw";

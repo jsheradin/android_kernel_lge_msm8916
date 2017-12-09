@@ -211,7 +211,7 @@
 		maxim,capacity_d = <0x0FBC>;
 		maxim,vf_fullcap_d = <0x0FBC>;
 
-		maxim,rescale_factor_d = <2>;
+		maxim,rescale_factor_d = <7>;
 
 		/* Common */
 		maxim,config = <0x2104>;

@@ -606,6 +606,9 @@ out:
 	if (ret) {
 		if (fence)
 			sync_fence_put(fence);
+		if (fd >= 0)
+			put_unused_fd(fd);
+
 	}
 	kgsl_syncsource_put(syncsource);
 	return ret;

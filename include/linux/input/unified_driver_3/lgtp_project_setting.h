@@ -78,6 +78,14 @@
 #define TOUCH_MODEL_C100N
 #endif
 
+#if defined(CONFIG_TOUCHSCREEN_MSM8916_M216N)
+#define TOUCH_MODEL_M216N
+#endif
+
+#if defined(CONFIG_TOUCHSCREEN_MSM8916_M216)
+#define TOUCH_MODEL_M216
+#endif
+
 /****************************************************************************
 * Available Feature supported by Unified Driver
 * If you want to use it, define it inside of model feature
@@ -136,7 +144,7 @@
 /*JDI In-cell*/
 #define TOUCH_TYPE_INCELL
 
-#elif defined(TOUCH_MODEL_YG) || defined (TOUCH_MODEL_C100N)
+#elif defined(TOUCH_MODEL_YG) || defined (TOUCH_MODEL_C100N) || defined (TOUCH_MODEL_M216N) || defined(TOUCH_MODEL_M216)
 
 /* AP Solution */
 #define TOUCH_PLATFORM_QCT

@@ -13,7 +13,6 @@
 #define LCD_EVENT_TOUCH_DRIVER_REGISTERED	0x03
 /* For notifying proxy status to operate ENA control in lcd driver*/
 #define LCD_EVENT_TOUCH_PROXY_STATUS		0X04
-
 #define LCD_EVENT_TOUCH_SLEEP_STATUS		0X05
 #define LCD_EVENT_TOUCH_SWIPE_STATUS		0X06
 #define LCD_EVENT_TOUCH_PANEL_INFO_READ		0x07
@@ -22,9 +21,6 @@
 /* For notify watch control data to control in lcd driver */
 #define LCD_EVENT_TOUCH_WATCH_POS_UPDATE	0x20
 #define LCD_EVENT_TOUCH_WATCH_LUT_UPDATE	0x21
-
-/* For notify esd data to control in lcd driver */
-#define LCD_EVENT_TOUCH_ESD_DETECTED			0x30
 
 /* For PPlus */
 #define NOTIFY_TOUCH_RESET			0x13
@@ -56,6 +52,4 @@ int touch_atomic_notifier_call(unsigned long val, void *v);
 int touch_register_client(struct notifier_block *nb);
 int touch_unregister_client(struct notifier_block *nb);
 int touch_notifier_call_chain(unsigned long val, void *v);
-
-extern void touch_notify_connect(u32 type);
 #endif /* _LINUX_TOUCH_NOTIFY_H */

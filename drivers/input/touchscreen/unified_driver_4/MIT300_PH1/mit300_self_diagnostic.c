@@ -394,7 +394,6 @@ static int  MIT300_PrintData(struct i2c_client *client, char *buf, int* result, 
 	int avg_max_2 = 0;
 	int avg_jitter_max = 0;
 	int error_count = 0;
-	int avg_error_count = 0;
 
 	TOUCH_FUNC();
 
@@ -723,12 +722,12 @@ static int  MIT300_PrintData(struct i2c_client *client, char *buf, int* result, 
 
 				if (jitter_avg_1 > avg_jitter_max) {
 					//TOUCH_LOG(" L: %d ", jitter_avg_1);
-					avg_error_count++;
+					error_count++;
 					*result = TOUCH_FAIL;
 				}
 				if (jitter_avg_2 > avg_jitter_max) {
 					//TOUCH_LOG(" R: %d ", jitter_avg_1);
-					avg_error_count++;
+					error_count++;
 					*result = TOUCH_FAIL;
 				}
 
@@ -751,8 +750,6 @@ static int  MIT300_PrintData(struct i2c_client *client, char *buf, int* result, 
 		TOUCH_LOG("=======Type(%d) Result is FAIL=======\n", type);
 		ret += sprintf(buf + ret, "Type(%d) Result is FAIL\n", type);
 		ret += sprintf(buf + ret, "This is %d error in test with '!' character\n", error_count);
-		if (type == CM_JITTER_SHOW)
-			ret += sprintf(buf + ret, "( %d : This is average error count in cmJitter test)\n", avg_error_count);
 	}
 
 	if (type == RAW_DATA_SHOW ||

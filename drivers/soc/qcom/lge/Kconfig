@@ -12,6 +12,14 @@ config MACH_MSM8939_ALTEV2_VZW
         help
           Support for the Qualcomm MSM8939 ALTEV2 VZW device.
 
+config MACH_MSM8939_ALTEV2_LGU_KR
+        bool "MSM8939 ALTEV2_LGU_KR"
+        depends on ARCH_MSM8916
+        select MACH_LGE
+	select LGE_ENABLE_THERMAL_CORE_CONTROL
+        help
+          Support for the Qualcomm MSM8939 ALTEV2 LGU KR device.
+
 config MACH_MSM8939_P1B_GLOBAL_COM
         bool "MSM8939 P1B_GLOBAL_COM"
         depends on ARCH_MSM8916
@@ -119,6 +127,14 @@ config LGE_DEFAULT_DISABLE_DLOAD_MODE
       If some crash occurs on boot-up,
       device enters into ramdump mode even though user build.
       (because default value of download_mode is 1)
+
+config LGE_LCD_OFF_DIMMING
+    tristate "Support LGE LCD off dimming reboot"
+    default n
+    depends on MACH_LGE
+    help
+      Support lcd off or dimming reboot when reboot reason is "LCD off".
+      lcd stay dimming until lcd is off and on again.
 
 endmenu
 

@@ -141,6 +141,13 @@ int power_block = 0;
 int mfts_mode = 0;
 
 
+extern int mit_lpwg_test(struct i2c_client *client);
+extern int mit_power_ctrl(struct i2c_client* client, int power_ctrl);
+extern int mit_ic_ctrl(struct i2c_client *client, u32 code, u32 value);
+extern int mip_lpwg_enable_sensing(struct i2c_client* client, bool bEnable);
+extern bool lge_get_mfts_mode(void);
+int mfts_lpwg = 0;
+EXPORT_SYMBOL(mfts_lpwg);
 static void safety_reset(struct lge_touch_data *ts);
 static int touch_ic_init(struct lge_touch_data *ts);
 static void touch_work_func_a(struct lge_touch_data *ts);
@@ -1571,7 +1578,9 @@ static int touch_parse_dt(struct device *dev, struct touch_platform_data *pdata)
 	struct touch_operation_role *role = pdata->role;
 	struct touch_power_info *pwr = pdata->pwr;
 	struct touch_limit_value *limit = pdata->limit;
-
+#if defined (CONFIG_MACH_MSM8916_C100_GLOBAL_COM)
+	int pinstate[2] = {0}; // GPIO119,GPIO120
+#endif
 	int i = 0;
 	int ret = 0;
 	char *tmp = NULL;
@@ -1782,7 +1791,43 @@ static int touch_parse_dt(struct device *dev, struct touch_platform_data *pdata)
 			}
 		}
 	}
-
+#if defined (CONFIG_MACH_MSM8916_C100_GLOBAL_COM)
+	if(gpio_is_valid(119 + 902)&&gpio_is_valid(120 + 902)){
+		pinstate[0] = gpio_get_value(119 + 902);
+		pinstate[1] = gpio_get_value(120 + 902);
+		TOUCH_ERR_MSG("gpio119:%d,gpio120:%d\n",pinstate[0],pinstate[1]);
+		if (pinstate[0]==1 && pinstate[1]==0){ //C100 650K
+			if (lge_get_board_revno() > HW_REV_B){
+				strncpy(pdata->fw_image, "melfas/mit300/c100/L0M50P1_2_33.bin", NAME_BUFFER_SIZE);
+				limit->raw_data_max = 3000;
+				limit->raw_data_min = 750;
+				limit->raw_data_margin = 0;
+				limit->raw_data_otp_min = 15000;
+				limit->raw_data_otp_max = 39000;
+				limit->cm_delta_max = 170;
+				limit->cm_delta_min = 70;
+				limit->jitter_max = 45;
+				limit->jitter_min = 0;
+				limit->open_short_max = 4050;
+				limit->open_short_min = 800;
+				limit->mux_short_max = 4050;
+				limit->mux_short_min = 800;
+				limit->lpwg_raw_data_max = 2900;
+				limit->lpwg_raw_data_min = 850;
+				limit->lpwg_jitter_max = 30;
+				limit->lpwg_jitter_min = 0;
+				limit->lpwg_rawdata_diff_max = 150;
+				limit->lpwg_rawdata_diff_min = 50;
+				limit->slope_max = 150;
+				limit->slope_min = 70;
+			}else{
+				strncpy(pdata->fw_image, "melfas/mit300/c100/L0M50P1_0_65.bin", NAME_BUFFER_SIZE);
+			}
+		}
+	}else{
+		TOUCH_ERR_MSG("gpio119,gpio120 not valid\n");
+	}
+#endif
 	return 0;
 }
 
@@ -2036,13 +2081,11 @@ static int touch_fb_suspend(struct device *device)
 {
 	struct lge_touch_data *ts =  dev_get_drvdata(device);
 	long ret = 0;
-
+	bool bMftsMode = lge_get_mfts_mode();
 	TOUCH_INFO_MSG("%s \n", __func__);
 
   if (mfts_mode && !ts->pdata->role->mfts_lpwg) {
 		TOUCH_INFO_MSG("%s : touch_fb_suspend - MFTS\n", __func__);
-		lpm_set_start(ts->client,1);
-		return 0;
 	}
 
 	ts->pdata->panel_on = 0;
@@ -2050,55 +2093,76 @@ static int touch_fb_suspend(struct device *device)
 		return 0;
 
 
+  touch_disable(ts->client->irq);
+   if(!bMftsMode)
+   {
 
-
-if (ts->pdata->lpwg_mode) {
-		TOUCH_INFO_MSG("ts->pdata->lpwg_mode : %d, \n", (u32)ts->pdata->lpwg_mode);
-		touch_drv->ic_ctrl(ts->client, IC_CTRL_LPWG, (u32)&(ts->pdata->lpwg_mode));
+      if (ts->pdata->lpwg_mode) {
+		   TOUCH_INFO_MSG("ts->pdata->lpwg_mode : %d, \n", (u32)ts->pdata->lpwg_mode);
+		   touch_drv->ic_ctrl(ts->client, IC_CTRL_LPWG, (u32)&(ts->pdata->lpwg_mode));
+		   atomic_set(&dev_state,DEV_RESUME_ENABLE);
+		   touch_enable(ts->client->irq);
+		   touch_enable_wake(ts->client->irq);
+	    }
+	    else
+	    {
+		     if(lge_get_boot_mode() == LGE_BOOT_MODE_QEM_130K) {
+			      //lpm_force_start(ts->client);
+           lpm_set_start(ts->client,1);
+		     } else {
+			lpm_set_sensing(ts->client, 0);
+			lpm_set_start(ts->client,1);
+		     }
+		     touch_power_cntl(ts, ts_role->suspend_pwr);
+		     atomic_set(&dev_state,DEV_SUSPEND);
+		     TOUCH_INFO_MSG("SUSPEND AND SET power off\n");
+      }
+   }
+   else
+   {
+        //bMftsMode
+         if(ts->pdata->role->mfts_lpwg){
+		ts->pdata->lpwg_debug_enable = 1;
+		touch_drv->sysfs(ts->client, 0, "1", 99);
+	        lpm_set_start(ts->client,1);
 		atomic_set(&dev_state,DEV_RESUME_ENABLE);
 		touch_enable(ts->client->irq);
 		touch_enable_wake(ts->client->irq);
-	} else {
-		if(lge_get_boot_mode() == LGE_BOOT_MODE_QEM_130K) {
-			//lpm_force_start(ts->client);
-                          lpm_set_start(ts->client,1);
-		} else {
-			lpm_set_start(ts->client,1);
-			lpm_set_sensing(ts->client, 0);
-		}
+	 } else {
+		lpm_set_sensing(ts->client, 0);
+		lpm_set_start(ts->client,1);
 		touch_power_cntl(ts, ts_role->suspend_pwr);
 		atomic_set(&dev_state,DEV_SUSPEND);
-		TOUCH_INFO_MSG("SUSPEND AND SET power off\n");
+	 }
+   }
+
+  if(power_block){
+	TOUCH_INFO_MSG("touch_suspend is not executed\n");
+	touch_enable(ts->client->irq);
+	return 0;
+  }
 
 
+  if (!ts->pdata->lpwg_mode)
+	cancel_delayed_work_sync(&ts->work_init);
 
+  if (ts_role->key_type == TOUCH_HARD_KEY)
+	cancel_delayed_work_sync(&ts->work_touch_lock);
 
-	if(power_block){
-		TOUCH_INFO_MSG("touch_suspend is not executed\n");
-		return 0;
-	}
-	touch_disable(ts->client->irq);
+  ret = wait_for_completion_interruptible_timeout(&ts->irq_completion, msecs_to_jiffies(1000));
+  if (ret == 0) {
+	TOUCH_INFO_MSG("Completion timeout \n");
+  } else if (ret < 0) {
+	TOUCH_INFO_MSG("Completion ret = %ld \n", ret);
+  }
 
-	if (!ts->pdata->lpwg_mode)
-		cancel_delayed_work_sync(&ts->work_init);
+  release_all_ts_event(ts);
 
-	if (ts_role->key_type == TOUCH_HARD_KEY)
-		cancel_delayed_work_sync(&ts->work_touch_lock);
+  if (ts->ts_data.palm) {
+	TOUCH_INFO_MSG("Palm released \n");
+  }
 
-	ret = wait_for_completion_interruptible_timeout(&ts->irq_completion, msecs_to_jiffies(1000));
-	if (ret == 0) {
-		TOUCH_INFO_MSG("Completion timeout \n");
-	} else if (ret < 0) {
-		TOUCH_INFO_MSG("Completion ret = %ld \n", ret);
-	}
-
-	release_all_ts_event(ts);
-
-	if (ts->ts_data.palm) {
-		TOUCH_INFO_MSG("Palm released \n");
-	}
-
-	memset(&ts->ts_data, 0x0, sizeof(ts->ts_data));
+  memset(&ts->ts_data, 0x0, sizeof(ts->ts_data));
 
 
 
@@ -2108,7 +2172,7 @@ if (ts->pdata->lpwg_mode) {
 			touch_drv->dsv_control(g_ts->client);
 		}
 #endif
-	}
+
 
 
 	return 0;
@@ -2117,7 +2181,7 @@ if (ts->pdata->lpwg_mode) {
 static int touch_fb_resume(struct device *device)
 {
 	struct lge_touch_data *ts =  dev_get_drvdata(device);
-
+	bool bMftsMode = lge_get_mfts_mode();
 	mutex_lock(&ts->thread_lock);
 
 	TOUCH_INFO_MSG("%s \n", __func__);
@@ -2135,18 +2199,29 @@ static int touch_fb_resume(struct device *device)
 		TOUCH_INFO_MSG("touch_resume is not executed\n");
 		goto exit;
 	}
-
-	if (ts->pdata->lpwg_mode) {
-		touch_disable_wake(ts->client->irq);
-		release_all_ts_event(ts);
-	} else {
-		if (ts->pdata->curr_pwr_state == POWER_ON) {
-			touch_disable_wake(ts->client->irq);
-			safety_reset(ts);
-		} else {
-			touch_power_cntl(ts, ts_role->resume_pwr);
-			touch_enable(ts->client->irq);
-		}
+  if(!bMftsMode) {
+	   if (ts->pdata->lpwg_mode) {
+		    touch_disable_wake(ts->client->irq);
+		    release_all_ts_event(ts);
+	   }
+	   else
+	   {
+		   if (ts->pdata->curr_pwr_state == POWER_ON) {
+			    touch_disable_wake(ts->client->irq);
+			    safety_reset(ts);
+		   } else {
+			    touch_power_cntl(ts, ts_role->resume_pwr);
+			    touch_enable(ts->client->irq);
+		   }
+	   }
+  }
+  else
+	{
+		//bMftsMode
+   if(ts->pdata->lpwg_debug_enable == 1)
+		ts->pdata->lpwg_debug_enable = 0;
+    touch_power_cntl(ts, POWER_ON);
+    touch_enable(ts->client->irq);
 	}
 
 	ts->ic_error_cnt =0;
@@ -2162,7 +2237,6 @@ exit:
 
 	return 0;
 }
-
 static int touch_suspend(struct device *device)
 {
 	TOUCH_INFO_MSG("%s \n", __func__);
@@ -2255,7 +2329,7 @@ static ssize_t fw_upgrade_store(struct lge_touch_data *ts, const char *buf, size
 		return count;
 	}
 
-	sscanf(buf, "%127s", ts->fw_info.path);
+	sscanf(buf, "%s", ts->fw_info.path);
 
 	while (ts->fw_info.is_downloading);
 
@@ -2400,7 +2474,7 @@ static ssize_t openshort_store(struct lge_touch_data *ts, const char *buf, size_
 	}
 
 	if (ts->pdata->panel_on == POWER_ON || ts->pdata->panel_on == POWER_WAKE) {
-		if (sscanf(buf, "%127s", cmd) != 1)
+		if (sscanf(buf, "%s", cmd) != 1)
 			return -EINVAL;
 
 		value = ts->pdata->check_openshort;
@@ -2439,7 +2513,7 @@ static ssize_t rawdata_store(struct lge_touch_data *ts, const char *buf, size_t 
 		return count;
 	}
 	if (ts->pdata->panel_on == POWER_ON || ts->pdata->panel_on == POWER_WAKE || ts->pdata->lpwg_debug_enable != 0) {
-		if (sscanf(buf, "%127s", cmd) != 1)
+		if (sscanf(buf, "%s", cmd) != 1)
 			return -EINVAL;
 
 		ret = touch_drv->sysfs(ts->client, 0, buf, SYSFS_RAWDATA_STORE);
@@ -2824,27 +2898,34 @@ static int mit_ts_lpwg_test(struct i2c_client *client)
 }
 static ssize_t show_lpwg_sd(struct lge_touch_data *ts, char *buf)
 {
-
    int ret = 0;
    int test_result = 0;
+   
+   if(ts->pdata->panel_on == POWER_OFF || ts->pdata->panel_on == POWER_SLEEP){
+	   if (!lge_get_mfts_mode()){
+       mit_power_ctrl(ts->client, ts_role->resume_pwr);
+       wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(3000));
+       mit_ic_ctrl(ts->client, IC_CTRL_LPWG, (u32)&(ts->pdata->lpwg_mode));
+       mip_lpwg_enable_sensing(ts->client, 1);
+       }
 
-   mit_power_ctrl(ts->client, ts_role->resume_pwr);
-		wake_lock_timeout(&touch_wake_lock, msecs_to_jiffies(3000));
-		mit_ic_ctrl(ts->client, IC_CTRL_LPWG, (u32)&(ts->pdata->lpwg_mode));
-		mip_lpwg_enable_sensing(ts->client, 1);
 
+       wake_lock(&touch_wake_lock);
+       mutex_lock(&ts->thread_lock);
 
-   wake_lock(&touch_wake_lock);
-   mutex_lock(&ts->thread_lock);
+       test_result = mit_ts_lpwg_test(ts->client);
 
-   test_result = mit_ts_lpwg_test(ts->client);
+       msleep(20);
+       ret = snprintf(buf, PAGE_SIZE, "====RESULT====\n");
+       ret += snprintf(buf+ret, PAGE_SIZE - ret, "LPWG RawData : %s", (test_result == 1) ? "PASS\n" : "FAIL\n");
 
-   msleep(20);
-   ret = snprintf(buf, PAGE_SIZE, "====RESULT====\n");
-   ret += snprintf(buf+ret, PAGE_SIZE - ret, "LPWG RawData : %s", (test_result == 1) ? "PASS\n" : "FAIL\n");
-
-   wake_unlock(&touch_wake_lock);
-   mutex_unlock(&ts->thread_lock);
+       wake_unlock(&touch_wake_lock);
+       mutex_unlock(&ts->thread_lock);   
+    }else {
+		ret = snprintf(buf,PAGE_SIZE,"If you want to check lpwg self diagnostic, please turn off the LCD.\n");
+		TOUCH_INFO_MSG("If you want to check lpwg self diagnostic, please turn off the LCD.\n");
+	}
+   
 
    return ret;
 
@@ -2870,6 +2951,7 @@ static ssize_t store_mfts_lpwg_test(struct lge_touch_data *ts,
 
 	ts->pdata->role->mfts_lpwg = value;
 	TOUCH_INFO_MSG("mfts_lpwg:%d\n", ts->pdata->role->mfts_lpwg);
+    mfts_lpwg = value;
 	if (ts->pdata->role->mfts_lpwg){
 		touch_sleep_status(ts->client, 0);// lcd on/off here
 

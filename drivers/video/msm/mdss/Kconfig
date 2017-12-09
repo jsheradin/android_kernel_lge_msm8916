@@ -79,9 +79,6 @@ config LGD_M2DONGBU_INCELL_VIDEO_HD_PANEL
 config LGD_PH1DONGBU_INCELL_VIDEO_HD_PANEL
 	bool "Enable LGD PH1DONGBU INCELL HD panel"
 	default n
-config TOVIS_PH1SYNAP_INCELL_VIDEO_HD_PANEL
-	bool "Enable TOVIS PH1SYNAP INCELL HD panel"
-	default n
 config LGE_MIPI_DSI_BYD_ILI9806E_WVGA
 	bool "Enable BYD ILI9806E panel"
 	default n
@@ -173,3 +170,6 @@ config LGE_DISPLAY_AOD_SUPPORT
     default n
     ---help---
     if you say yes here you get support for the 'Always On Display'
+config LGE_DISPLAY_DSI_CMD_HS_DISABLE
+	bool "Disable mipi cmd in hs mode"
+	default n

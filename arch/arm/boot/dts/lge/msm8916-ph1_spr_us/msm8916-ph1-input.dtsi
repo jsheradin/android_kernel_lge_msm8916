@@ -48,14 +48,6 @@
 		use_security_all = <0>;
 	};
 
-	synaptics_td4100@20 {
-		compatible = "unified_driver4,td4100";
-		status = "ok";
-		reg = <0x20>;
-		interrupt-parent = <&msm_gpio>;
-		interrupts = <13 0x2>;
-	};
-
 	synaptics_td4191_dsx@20 {
 		status = "disable";
 	};

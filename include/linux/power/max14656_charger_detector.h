@@ -9,6 +9,10 @@
  *
  */
 
+#include <linux/wakelock.h>
+
+#define I2C_SUSPEND_WORKAROUND
+
 #ifdef CONFIG_LGE_PM
 enum max14656_chg_type {
 	NO_CHARGER 		 = 0,
@@ -27,8 +31,12 @@ struct max14656_chip {
 	struct i2c_client 		*client;
 	struct power_supply 	*batt_psy;
 	struct power_supply 	detect_psy;
+	struct wake_lock		max14656_irq_wake_lock;
 	struct delayed_work 	irq_work;
-
+#ifdef I2C_SUSPEND_WORKAROUND
+	struct delayed_work		check_suspended_work;
+	bool suspend;
+#endif
 	int irq;
 	int int_gpio;
 	int chg_detect_done;

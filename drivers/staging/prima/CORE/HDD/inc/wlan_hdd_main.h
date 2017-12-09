@@ -1453,7 +1453,6 @@ struct hdd_context_s
     struct hdd_ll_stats_context ll_stats_context;
 #endif /* End of WLAN_FEATURE_LINK_LAYER_STATS */
     v_BOOL_t isSetBandByNL;
-    v_U8_t con_scan_abort_cnt;
 };
 
 

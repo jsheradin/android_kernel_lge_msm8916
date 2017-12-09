@@ -93,7 +93,11 @@ enum sensor_sub_module_t {
 /* LGE_CHANGE_S, tcs, 2015-01-14, booil.park@lge.com */
 	SUB_MODULE_TCS,
 /* LGE_CHANGE_E, tcs, 2015-01-14, booil.park@lge.com */
+
+#if defined(CONFIG_MSM_OTP) || defined(LGE_CAMERA_USE_OTP)
 	SUB_MODULE_OTP,
+#endif
+
 	SUB_MODULE_MAX,
 };
 
@@ -297,12 +301,8 @@ struct eeprom_get_cmm_t {
 struct msm_eeprom_cfg_data {
 	enum eeprom_cfg_type_t cfgtype;
 	uint8_t is_supported;
-	/* LGE_CHANGE_S, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
-	enum camb_position_t position;
-	uint8_t AAT_Checksum;
-	/* LGE_CHANGE_E, Add CRC check code for AAT camera, 2016-02-24, joongeun.choi@lge.com */
 	union {
-		char eeprom_name[MAX_SENSOR_NAME];
+		char eeprom_name[MAX_EEPROM_NAME];
 		struct eeprom_get_t get_data;
 		struct eeprom_read_t read_data;
 		struct eeprom_write_t write_data;
@@ -452,7 +452,7 @@ struct msm_eeprom_cfg_data32 {
 	enum eeprom_cfg_type_t cfgtype;
 	uint8_t is_supported;
 	union {
-		char eeprom_name[MAX_SENSOR_NAME];
+		char eeprom_name[MAX_EEPROM_NAME];
 		struct eeprom_get_t get_data;
 		struct eeprom_read_t32 read_data;
 		struct eeprom_write_t32 write_data;

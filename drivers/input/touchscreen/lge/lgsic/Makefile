@@ -11,7 +11,7 @@ obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_lg4895.o
 obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_lg4895_watch.o
 obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_lg4895_prd.o
 obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_lg4895_abt.o
-# obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_lg4895_asc.o
+obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_lg4895_asc.o
 obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4895)		+= touch_filter.o
 
 obj-$(CONFIG_LGE_TOUCH_LGSIC_LG4945)         += touch_lg4945.o

@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2012-2016, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2012-2017, The Linux Foundation. All rights reserved.
  *
  * This program is free software; you can redistribute it and/or modify
  * it under the terms of the GNU General Public License version 2 and
@@ -31,7 +31,19 @@ extern struct kcal_data kcal_value;
 #endif
 
 struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
-	[MDSS_MDP_CSC_YUV2RGB_601L] = {
+	[MDSS_MDP_CSC_RGB2RGB] = {
+		0,
+		{
+			0x0200, 0x0000, 0x0000,
+			0x0000, 0x0200, 0x0000,
+			0x0000, 0x0000, 0x0200,
+		},
+		{ 0x0, 0x0, 0x0,},
+		{ 0x0, 0x0, 0x0,},
+		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+	},
+	[MDSS_MDP_CSC_YUV2RGB] = {
 		0,
 		{
 			0x0254, 0x0000, 0x0331,
@@ -40,63 +52,15 @@ struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 		},
 		{ 0xfff0, 0xff80, 0xff80,},
 		{ 0x0, 0x0, 0x0,},
-		{ 0x10, 0xeb, 0x10, 0xf0, 0x10, 0xf0,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-	},
-	[MDSS_MDP_CSC_YUV2RGB_601FR] = {
-		0,
-		{
-			0x0200, 0x0000, 0x02ce,
-			0x0200, 0xff50, 0xfe92,
-			0x0200, 0x038b, 0x0000,
-		},
-		{ 0x0000, 0xff80, 0xff80,},
-		{ 0x0, 0x0, 0x0,},
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 	},
-	[MDSS_MDP_CSC_YUV2RGB_709L] = {
-		0,
-		{
-			0x0254, 0x0000, 0x0396,
-			0x0254, 0xff93, 0xfeef,
-			0x0254, 0x043e, 0x0000,
-		},
-		{ 0xfff0, 0xff80, 0xff80,},
-		{ 0x0, 0x0, 0x0,},
-		{ 0x10, 0xeb, 0x10, 0xf0, 0x10, 0xf0,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-	},
-	[MDSS_MDP_CSC_RGB2YUV_601L] = {
+	[MDSS_MDP_CSC_RGB2YUV] = {
 		0,
 		{
 			0x0083, 0x0102, 0x0032,
-			0xffb4, 0xff6b, 0x00e1,
-			0x00e1, 0xff44, 0xffdb
-		},
-		{ 0x0, 0x0, 0x0,},
-		{ 0x0010, 0x0080, 0x0080,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-		{ 0x0010, 0x00eb, 0x0010, 0x00f0, 0x0010, 0x00f0,},
-	},
-	[MDSS_MDP_CSC_RGB2YUV_601FR] = {
-		0,
-		{
-			0x0099, 0x012d, 0x003a,
-			0xffaa, 0xff56, 0x0100,
-			0x0100, 0xff2a, 0xffd6
-		},
-		{ 0x0, 0x0, 0x0,},
-		{ 0x0000, 0x0080, 0x0080,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-	},
-	[MDSS_MDP_CSC_RGB2YUV_709L] = {
-		0,
-		{
-			0x005d, 0x013a, 0x0020,
-			0xffcc, 0xff53, 0x00e1,
-			0x00e1, 0xff34, 0xffeb
+			0x1fb5, 0x1f6c, 0x00e1,
+			0x00e1, 0x1f45, 0x1fdc
 		},
 		{ 0x0, 0x0, 0x0,},
 		{ 0x0010, 0x0080, 0x0080,},
@@ -115,28 +79,27 @@ struct mdp_csc_cfg mdp_csc_convert[MDSS_MDP_MAX_CSC] = {
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 	},
-	[MDSS_MDP_CSC_RGB2RGB] = {
-		0,
-		{
-			0x0200, 0x0000, 0x0000,
-			0x0000, 0x0200, 0x0000,
-			0x0000, 0x0000, 0x0200,
-		},
-		{ 0x0, 0x0, 0x0,},
-		{ 0x0, 0x0, 0x0,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-		{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-	},
 };
 
 #if defined(CONFIG_LGE_BROADCAST_TDMB)
 struct mdp_csc_cfg dmb_csc_convert = {
-#if defined(CONFIG_MACH_MSM8916_G4STYLUSW_KT_KR)
+#if defined(CONFIG_MACH_MSM8916_PH1_KR)
 	0,
 	{
 		0x0254, 0x0000, 0x0331,
 		0x0254, 0xff37, 0xfe60,
 		0x0254, 0x0409, 0x0000,
+	},
+	{ 0xfff0, 0xff80, 0xff80,},
+	{ 0x0, 0x0, 0x0,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#elif defined(CONFIG_MACH_MSM8916_G4STYLUSW_KT_KR)
+	0,
+	{
+		0x0236, 0x0000, 0x0331, /* 283 */
+		0x0244, 0xff37, 0xfe60, /* 290 */
+		0x0276, 0x0409, 0x0000, /* 315 */
 	},
 	{ 0xfff0, 0xff80, 0xff80,},
 	{ 0x0, 0x0, 0x0,},
@@ -154,33 +117,22 @@ struct mdp_csc_cfg dmb_csc_convert = {
 	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
 #elif defined(CONFIG_MACH_MSM8916_C100N_KR)
-	0,
-	{
-		0x024c, 0x0000, 0x0331,
-		0x0250, 0xff37, 0xfe60,
-		0x0264, 0x0409, 0x0000,
-	},
-	{ 0xfff0, 0xff80, 0xff80,},
-	{ 0x0, 0x0, 0x0,},
-	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-#elif defined(CONFIG_MACH_MSM8916_PH1_KR)
-	0,
-	{
-		0x0244, 0x0000, 0x0331, // 290
-		0x0248, 0xff37, 0xfe60, // 292
-		0x0270, 0x0409, 0x0000, // 312
-	},
-	{ 0xfff0, 0xff80, 0xff80,},
-	{ 0x0, 0x0, 0x0,},
-	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-	{ 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
-#elif defined(CONFIG_MACH_MSM8916_PH1_GLOBAL_COM)
         0,
         {
-                0x0244, 0x0000, 0x0331, // 290
-                0x0248, 0xff37, 0xfe60, // 292
-                0x0270, 0x0409, 0x0000, // 312
+                0x024c, 0x0000, 0x0331,
+                0x0250, 0xff37, 0xfe60,
+                0x0264, 0x0409, 0x0000,
+        },
+        { 0xfff0, 0xff80, 0xff80,},
+        { 0x0, 0x0, 0x0,},
+        { 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+        { 0x0, 0xff, 0x0, 0xff, 0x0, 0xff,},
+#elif defined(CONFIG_MACH_MSM8916_M216N_KR)
+        0,
+        {
+                0x0232, 0x0000, 0x0331, /* 281 */
+                0x0250, 0xff37, 0xfe60, /* 296 */
+                0x0270, 0x0409, 0x0000, /* 312 */
         },
         { 0xfff0, 0xff80, 0xff80,},
         { 0x0, 0x0, 0x0,},
@@ -1004,26 +956,30 @@ static int pp_vig_pipe_setup(struct mdss_mdp_pipe *pipe, u32 *op)
 						MDP_CSC_FLAG_YUV_IN) << 18;
 			opmode |= !!(pipe->pp_cfg.csc_cfg.flags &
 						MDP_CSC_FLAG_YUV_OUT) << 19;
-
-			mdss_mdp_csc_setup_data(
-				MDSS_MDP_BLOCK_SSPP,
-				pipe->num,
-				&pipe->pp_cfg.csc_cfg);
-
+			/*
+			 * TODO: Allow pipe to be programmed whenever new CSC is
+			 * applied (i.e. dirty bit)
+			 */
+			mdss_mdp_csc_setup_data(MDSS_MDP_BLOCK_SSPP, pipe->num,
+					&pipe->pp_cfg.csc_cfg);
 	} else {
 		if (pipe->src_fmt->is_yuv) {
 			opmode |= (0 << 19) |	/* DST_DATA=RGB */
 				  (1 << 18) |	/* SRC_DATA=YCBCR */
 				  (1 << 17);	/* CSC_1_EN */
-
+			/*
+			 * TODO: Needs to be part of dirty bit logic: if there
+			 * is a previously configured pipe need to re-configure
+			 * CSC matrix
+			 */
 #if !defined(CONFIG_LGE_BROADCAST_TDMB)
 			mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num,
-					   pp_vig_csc_pipe_val(pipe));
+					   MDSS_MDP_CSC_YUV2RGB);
 #else
 			if(dmb_status == 1) {
 				mdss_mdp_csc_setup_data(MDSS_MDP_BLOCK_SSPP, pipe->num, &dmb_csc_convert);
 			} else {
-				mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num, MDSS_MDP_CSC_YUV2RGB_601FR);
+				mdss_mdp_csc_setup(MDSS_MDP_BLOCK_SSPP, pipe->num, MDSS_MDP_CSC_YUV2RGB);
 			}
 #endif /* LGE_BROADCAST */
 		}
@@ -5020,7 +4976,6 @@ int mdss_mdp_ad_input(struct msm_fb_data_type *mfd,
 #endif
 			mutex_unlock(&mfd->bl_lock);
 			mutex_lock(&ad->lock);
-			mfd->calib_mode_bl = bl;
 		} else {
 			pr_warn("should be in calib mode\n");
 		}
@@ -5916,9 +5871,6 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 	int ret = 0;
 	char __iomem *ptr = addr;
 	char __iomem *mixer_base = mdss_res->mixer_intf->base;
-	char __iomem *rgb_base   = mdss_res->rgb_pipes->base;
-	char __iomem *dma_base   = mdss_res->dma_pipes->base;
-	char __iomem *vig_base   = mdss_res->vig_pipes->base;
 	char __iomem *ctl_base   = mdss_res->ctl_off->base;
 	char __iomem *dspp_base  = mdss_res->mixer_intf->dspp_base;
 
@@ -5950,17 +5902,20 @@ static int is_valid_calib_addr(void *addr, u32 operation)
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= vig_base) {
+		if (mdss_res->vig_pipes &&
+		    ptr >= mdss_res->vig_pipes->base) {
 			ret = is_valid_calib_vig_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= rgb_base) {
+		if (mdss_res->rgb_pipes &&
+		    ptr >= mdss_res->rgb_pipes->base) {
 			ret = is_valid_calib_rgb_addr(ptr);
 			if (ret)
 				goto valid_addr;
 		}
-		if (ptr >= dma_base) {
+		if (mdss_res->dma_pipes &&
+		    ptr >= mdss_res->dma_pipes->base) {
 			ret = is_valid_calib_dma_addr(ptr);
 			if (ret)
 				goto valid_addr;
@@ -6007,9 +5962,6 @@ int mdss_mdp_calib_mode(struct msm_fb_data_type *mfd,
 		return -EINVAL;
 	mutex_lock(&mdss_pp_mutex);
 	mfd->calib_mode = cfg->calib_mask;
-	mutex_lock(&mfd->bl_lock);
-	mfd->calib_mode_bl = mfd->bl_level;
-	mutex_unlock(&mfd->bl_lock);
 	mutex_unlock(&mdss_pp_mutex);
 	return 0;
 }

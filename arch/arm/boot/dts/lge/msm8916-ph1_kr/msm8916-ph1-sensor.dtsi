@@ -25,7 +25,7 @@
 		avago,vdd_ana-supply = <&pm8916_l17_sns>;
 		avago,vddio_i2c-supply = <&pm8916_l6>;
 		avago,irq-gpio = <&msm_gpio 113 0x2>;
-		avago,ps_threshold = <500>;
+		avago,ps_threshold = <300>;
 		avago,ps_hysteresis_threshold = <220>;
 		avago,ps_pulse = <6>;
 		avago,ps_pgain = <0x08>;

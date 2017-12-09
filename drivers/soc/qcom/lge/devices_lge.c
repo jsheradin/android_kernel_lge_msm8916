@@ -364,6 +364,9 @@ static hw_rev_type lge_bd_rev = HW_REV_A;
 	defined(CONFIG_MACH_MSM8939_PH2_GLOBAL_COM)
 char *rev_str[] = {"rev_0", "rev_a", "rev_b", "rev_c", "rev_d",
 	"rev_e", "rev_10", "rev_11","reserved"};
+#elif defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
+char *rev_str[] = {"rev_0", "rev_a", "rev_b", "rev_c", "rev_d",
+	"rev_e", "rev_f", "rev_10","reserved"};
 #else
 char *rev_str[] = {"evb1", "evb2", "rev_a", "rev_b", "rev_c", "rev_d",
 	"rev_e", "rev_f", "rev_10", "rev_11","reserved"};
@@ -398,7 +401,7 @@ void pseudo_batt_set(struct pseudo_batt_info_type *info)
 	pseudo_batt_info.charging = info->charging;
 
 #ifndef CONFIG_BQ24296_CHARGER
-#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BC_SPR_US) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
+#if !defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) && !defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR) && !defined(CONFIG_MACH_MSM8939_P1B_GLOBAL_COM) && !defined(CONFIG_MACH_MSM8939_P1BC_SPR_US) && !defined(CONFIG_MACH_MSM8939_P1BSSN_SKT_KR) && \
 	!defined(CONFIG_MACH_MSM8939_P1BSSN_BELL_CA) && !defined(CONFIG_MACH_MSM8939_P1BSSN_VTR_CA) && \
 	!defined(CONFIG_MACH_MSM8939_PH2_GLOBAL_COM)
 	pseudo_batt_ibatmax_set();
@@ -677,6 +680,7 @@ int  __init lge_add_android_usb_devices(void)
 module_init(lge_add_android_usb_devices);
 #endif
 
+#if defined (CONFIG_LGE_QSDL_SUPPORT)
 static int lge_boot_reason = -1; /* undefined for error checking */
 static int __init lge_check_bootreason(char *reason)
 {
@@ -700,6 +704,33 @@ int lge_get_bootreason(void)
 {
 	return lge_boot_reason;
 }
+#endif
+
+#if defined(CONFIG_LGE_LCD_OFF_DIMMING)
+static int lge_boot_reason_code = -1; /* undefined for error checking */
+static int __init lge_check_bootreasoncode(char *reason)
+{
+	int ret = 0;
+
+	/* handle corner case of kstrtoint */
+	if (!strcmp(reason, "0xffffffff")) {
+		lge_boot_reason_code = 0xffffffff;
+		return 1;
+	}
+	ret = kstrtoint(reason, 16, &lge_boot_reason_code);
+	if (!ret)
+		printk(KERN_INFO "LGE REBOOT REASON CODE: %x\n", lge_boot_reason_code);
+	else
+		printk(KERN_INFO "LGE REBOOT REASON CODE: Couldn't get bootreasoncode - %d\n",ret);
+	return 1;
+}
+__setup("lge.bootreasoncode=", lge_check_bootreasoncode);
+
+int lge_get_bootreasoncode(void)
+{
+	return lge_boot_reason_code;
+}
+#endif
 
 #ifdef CONFIG_LGE_KSWITCH
 static

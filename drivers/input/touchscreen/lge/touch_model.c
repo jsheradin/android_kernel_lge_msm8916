@@ -53,7 +53,6 @@ int touch_get_dts_base(struct touch_core_data *ts)
 	PROPERTY_BOOL(np, "use_lpwg", ts->role.use_lpwg);
 	PROPERTY_BOOL(np, "use_firmware", ts->role.use_firmware);
 	PROPERTY_U32(np, "use_lpwg_test", ts->role.use_lpwg_test);
-	PROPERTY_BOOL(np, "hide_coordinate", ts->role.hide_coordinate);
 
 	/* Power */
 	PROPERTY_GPIO(np, "vdd-gpio", ts->vdd_pin);
@@ -74,8 +73,6 @@ int touch_get_dts_base(struct touch_core_data *ts)
 	PROPERTY_STRING(np, "panel_spec_mfts_folder", ts->panel_spec_mfts);
 	PROPERTY_STRING(np, "panel_spec_mfts_flat", ts->panel_spec_mfts_flat);
 	PROPERTY_STRING(np, "panel_spec_mfts_curved", ts->panel_spec_mfts_curved);
-	PROPERTY_U32(np, "jitter_spec", ts->jitter_spec);
-	PROPERTY_U32(np, "jitter_avg_spec", ts->jitter_avg_spec);
 	TOUCH_I("end dev.of_node\n");
 
 	return 0;

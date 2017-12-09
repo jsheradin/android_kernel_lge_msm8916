@@ -29,7 +29,7 @@ static int time_order = 1;
 
 #define CHG_MAXIDX	7
 
-#ifdef CONFIG_MACH_MSM8939_ALTEV2_VZW
+#if defined(CONFIG_MACH_MSM8939_ALTEV2_VZW) || defined(CONFIG_MACH_MSM8939_ALTEV2_LGU_KR)
 static struct batt_temp_table chg_temp_table[CHG_MAXIDX] = {
 	{INT_MIN,      -101,    CHG_BATTEMP_BL_M11},
 	{   -100,       -50,    CHG_BATTEMP_M10_M5},

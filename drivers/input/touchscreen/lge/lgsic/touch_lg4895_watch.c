@@ -634,7 +634,6 @@ void lg4895_font_download(struct work_struct *font_download_work)
 error:
 	atomic_set(&d->watch.state.font_status, FONT_EMPTY);
 	TOUCH_I("%s fail %d\n", __func__, ret);
-	mutex_unlock(&ts->lock);
 	return;
 }
 

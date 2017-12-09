@@ -133,7 +133,11 @@
 #if defined (CONFIG_MACH_MSM8916_C70_GLOBAL_COM) || \
 	defined (CONFIG_MACH_MSM8916_C70N_GLOBAL_COM) || \
 	defined (CONFIG_MACH_MSM8916_C70DS_GLOBAL_COM) || \
-	defined (CONFIG_MACH_MSM8916_K5)
+	defined (CONFIG_MACH_MSM8916_K5) || \
+	defined (CONFIG_MACH_MSM8939_M239DS_GLOBAL_COM) || \
+	defined (CONFIG_MACH_MSM8916_M216N_KR) || \
+	defined (CONFIG_MACH_MSM8916_M216N_GLOBAL_COM) || \
+	defined (CONFIG_MACH_MSM8916_M216_GLOBAL_COM)
 #define EOC_SOC_LEVEL	98
 #else
 #define EOC_SOC_LEVEL	100
@@ -3814,6 +3818,33 @@ static int set_battery_data(struct qpnp_bms_chip *chip)
                         battery_profile = "qcom,lgc-battery-data";
                         pr_info("[BATTERY PROFILE] No battery ID matching\nUsing default profile - LGChem_2300mAh for id(%lld)\n",battery_id);
                         break;
+#elif defined(CONFIG_LGE_PM_BATTERY_CAPACITY_2300mAh)
+		case BATT_ID_RA4301_VC1 :
+		case BATT_ID_SW3800_VC0 :
+			battery_profile = "qcom,lgc-battery-data";
+			pr_info("[BATTERY PROFILE] Using battery profile - "\
+				"LGChem_2300mAh for id(%lld)\n",battery_id);
+			break;
+		case BATT_ID_RA4301_VC0 :
+		case BATT_ID_SW3800_VC1 :
+			battery_profile = "qcom,byd-battery-data";
+			pr_info("[BATTERY PROFILE] Using battery profile - "\
+				"BYD_2300mAh for id(%lld)\n",battery_id);
+			break;
+		case BATT_ID_DS2704_N :
+		case BATT_ID_DS2704_L :
+		case BATT_ID_DS2704_C :
+		case BATT_ID_ISL6296_N :
+		case BATT_ID_ISL6296_L :
+		case BATT_ID_ISL6296_C :
+		case BATT_ID_RA4301_VC2 :
+		case BATT_ID_SW3800_VC2 :
+		default :
+			battery_profile = "qcom,lgc-battery-data";
+			pr_info("[BATTERY PROFILE] No battery ID matching\n"\
+				"Using default profile - "\
+				"LGChem_2300mAh for id(%lld)\n", battery_id);
+			break;
 #elif defined(CONFIG_LGE_PM_BATTERY_CAPACITY_2050mAh)
 		case BATT_ID_10KOHM_TCD:
 			battery_profile = "qcom,tocad-battery-data";

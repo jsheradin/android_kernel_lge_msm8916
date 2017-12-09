@@ -942,7 +942,7 @@ static int mit_touch_event(struct i2c_client *client, struct touch_data *data, u
 			} else {
 				if (palm) {
 					TOUCH_INFO_MSG("Palm detected : %d \n", pressure);
-					return -EIO;
+					//return -EIO;
 				}
 				data->curr_data[id].id = id;
 				data->curr_data[id].x_position = x;
@@ -955,9 +955,13 @@ static int mit_touch_event(struct i2c_client *client, struct touch_data *data, u
 				if(pressure < 1 ) pressure = 1;
 				else if(pressure > MAX_PRESSURE - 1) pressure = MAX_PRESSURE - 1;
 
-				data->curr_data[id].pressure = pressure;
+			if(palm) {
+                 //data->curr_data[id].pressure = 255;
 
-				data->curr_data[id].status = FINGER_PRESSED;
+        }else{
+				data->curr_data[id].pressure = pressure;
+        }				
+                data->curr_data[id].status = FINGER_PRESSED;
 				touch_count++;
 			}
 
@@ -1913,8 +1917,8 @@ static int lpwg_control(struct mit_data* ts, u8 mode)
 		if(ts->pdata->lpwg_debug_enable){
 			mip_lpwg_debug_enable(ts->client);
 		}
-                mip_lpwg_start(ts->client);
                 mip_lpwg_enable_sensing(ts->client, ts->enable_sensing);
+                mip_lpwg_start(ts->client);
 		break;
 	case LPWG_MULTI_TAP:
 		mip_lpwg_config(ts->client);
@@ -1923,8 +1927,8 @@ static int lpwg_control(struct mit_data* ts, u8 mode)
 		if(ts->pdata->lpwg_debug_enable){
 			mip_lpwg_debug_enable(ts->client);
 		}
-                mip_lpwg_start(ts->client);
                 mip_lpwg_enable_sensing(ts->client, ts->enable_sensing);
+                mip_lpwg_start(ts->client);
 		break;
 	default:
 		tci_control(ts, TCI_ENABLE_CTRL, 0);
@@ -2679,6 +2683,9 @@ static ssize_t mit_lpwg_store(struct i2c_client *client, char* buf1, const char 
 		} else {
 			TOUCH_INFO_MSG("PANEL ON \n");
                         atomic_set(&dev_state,DEV_RESUME_ENABLE);
+                        if(ts->pdata->lpwg_mode && ts->pdata->lpwg_prox){
+                            ts->enable_sensing = 1;
+                        }
                         touch_enable(ts->client->irq);
                         touch_disable_wake(ts->client->irq);
 		}
@@ -2818,6 +2825,10 @@ static int mit_sysfs(struct i2c_client *client, char *buf1, const char *buf2, u3
 		case SYSFS_LPWG_LCD_STATUS_SHOW:
 			mit_get_lpwg_lcd_status(ts);
 			break;
+        case 99:
+			mip_lpwg_enable_sensing(client, true);
+			mip_lpwg_debug_enable(client);
+                        break;
 	}
 
 	if (code != SYSFS_TESTMODE_VERSION_SHOW && code != SYSFS_KEYGUARD_STORE) {

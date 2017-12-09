@@ -80,7 +80,6 @@ int write_file(char *filename, char *data)
 	sys_chmod(filename, 0666);
 	if (fd < 0) {
 		TOUCH_INFO_MSG("%s :  Open file error [ %d ]\n", __func__, fd);
-		set_fs(old_fs);
 		return fd;
 	} else {
 		sys_write(fd, data, strlen(data));
@@ -102,7 +101,7 @@ int write_log(char *filename, char *data)
 		set_fs(KERNEL_DS);
 		if (filename == NULL) {
 			if (factory_boot)
-				fname =  "/data/logger/touch_self_test.txt";
+				fname =  "/data/touch/touch_self_test.txt";
 			else
 				fname = "/sdcard/touch_self_test.txt";
 
@@ -217,7 +216,7 @@ int get_limit(unsigned char Tx, unsigned char Rx, struct i2c_client client,
 		ret =  -1;
 		goto exit;
 	}
-	
+
 	if (breakpoint == NULL) {
 		TOUCH_INFO_MSG("%s : breakpoint is null\n", __func__);
 		ret =  -1;

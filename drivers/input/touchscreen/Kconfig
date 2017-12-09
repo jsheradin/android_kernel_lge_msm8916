@@ -973,16 +973,25 @@ config TOUCHSCREEN_FT5X06_GESTURE
 
          If unsure, say N.
 
-config TOUCHSCREEN_MSTAR21XX
-       tristate "mstar touchscreens"
-       depends on I2C
-       help
-         Say Y here if you have a mstar touchscreen.
+config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
+	bool "Synaptics DSX firmware update extra sysfs attributes"
+	depends on TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
+	help
+	  Say Y here to enable support for extra sysfs attributes
+	  supporting firmware update in a development environment.
+	  This does not affect the core or other subsystem attributes.
 
-         If unsure, say N.
+	  If unsure, say N.
 
-         To compile this driver as a module, choose M here: the
-         module will be called msg21xx_ts.
+config TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE_EXTRA_SYSFS
+	bool "Synaptics DSX firmware update extra sysfs attributes"
+	depends on TOUCHSCREEN_SYNAPTICS_DSX_FW_UPDATE
+	help
+	  Say Y here to enable support for extra sysfs attributes
+	  supporting firmware update in a development environment.
+	  This does not affect the core or other subsystem attributes.
+
+	  If unsure, say N.
 
 config TOUCHSCREEN_GEN_VKEYS
        tristate "Touchscreen Virtual Keys Driver"
@@ -1057,6 +1066,26 @@ config TOUCHSCREEN_MSM8916_C100N
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called synaptics_C100N.
+
+config TOUCHSCREEN_MSM8916_M216N
+        tristate "Synaptics M216N I2C Touchscreen"
+        depends on I2C
+        help
+          Say Y here if you have Synaprics I2C touchscreen,
+          such as TD4191, connected to your system.
+          If unsure, say N.
+          To compile this driver as a module, choose M here: the
+          module will be called synaptics_M216N.
+
+config TOUCHSCREEN_MSM8916_M216
+	tristate "Synaptics M216 I2C Touchscreen"
+	depends on I2C
+	help
+	  Say Y here if you have Synaprics I2C touchscreen,
+	  such as TD4191, connected to your system.
+	  If unsure, say N.
+	  To compile this driver as a module, choose M here: the
+	  module will be called synaptics_M216.
 
 config MSM8916_C90
 	tristate "msm 8916 c90nas_spr_us Synaptics S3320 I2C Touchscreen"
@@ -1174,14 +1203,6 @@ config TOUCHSCREEN_UNIFIED_MELFAS_MIT300_PH1
 	default n
 	help
          Say Y here if you have a Mefas MIT-300(PH1) I2C touchscreen
-         connected to your system.
-
-config TOUCHSCREEN_UNIFIED_SYNAPTICS_TD4100_PH1
-	bool "Synaptics TD4100 based on LGE Unified driver Ver4.0"
-	depends on I2C && TOUCHSCREEN_UNIFIED_DRIVER4
-	default n
-	help
-         Say Y here if you have a Synaptics TD4100(PH1) I2C touchscreen
          connected to your system.
 
 config MSM8916_C70
@@ -1354,5 +1375,17 @@ config TOUCHSCREEN_IT7260_I2C
 
 	  To compile this driver as a module, choose M here: the
 	  module will be called it7258_ts_i2c.
+
+config TOUCHSCREEN_HIMAX_HX852xES
+        bool "Himax touchpanel HX852xES series"
+        depends on I2C
+        help
+          Say Y here if you have a Himax HX852xES touchscreen.
+          HX852xES controllers are multi touch controllers which can
+          report 10 touches at a time.
+
+          If unsure, say N.
+
+source "drivers/input/touchscreen/hx852xes/Kconfig"
 
 endif

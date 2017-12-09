@@ -419,7 +419,10 @@ static void WqTouchInit(struct work_struct *work_init)
 
 	if( pDriverData->bootMode != BOOT_OFF_CHARGING )
 		TouchDisableIrq();
-	
+
+	if(wakeup_by_swipe == 0)
+		release_all_finger(pDriverData);
+
 	pDeviceSpecificFunc->Reset(pDriverData->client);
 	pDeviceSpecificFunc->InitRegister(pDriverData->client);
 	if( pDriverData->nextState == STATE_NORMAL_HOVER ) {
@@ -675,7 +678,7 @@ static void WqfirmwareUpgrade(struct work_struct *work_upgrade)
 	
 }
 
-#if !defined ( TOUCH_MODEL_C70 ) && !defined ( TOUCH_MODEL_C90NAS ) && !defined ( TOUCH_MODEL_P1B ) && !defined ( TOUCH_MODEL_P1C ) && !defined ( TOUCH_MODEL_YG ) && !defined ( TOUCH_MODEL_C100N )/* TBD : temporally block ( C70 is not ready ) */
+#if !defined ( TOUCH_MODEL_C70 ) && !defined ( TOUCH_MODEL_C90NAS ) && !defined ( TOUCH_MODEL_P1B ) && !defined ( TOUCH_MODEL_P1C ) && !defined ( TOUCH_MODEL_YG ) && !defined ( TOUCH_MODEL_M216N ) && !defined ( TOUCH_MODEL_C100N ) && !defined ( TOUCH_MODEL_M216 )/* TBD : temporally block ( C70 is not ready ) */
 static void MftsTouchOnOff(TouchDriverData *pDriverData, int isOn)
 {
 	if( isOn == 1 )
@@ -1169,7 +1172,7 @@ static ssize_t store_upgrade(struct i2c_client *client, const char *buf, size_t 
 	pDriverData->useDefaultFirmware = TOUCH_FALSE;
 
 	memset(pDriverData->fw_image, 0x00, sizeof(pDriverData->fw_image));
-	sscanf(buf, "%255s", pDriverData->fw_image);
+	sscanf(buf, "%s", pDriverData->fw_image);
 
 	queue_delayed_work(touch_wq, &pDriverData->work_upgrade, 0);
 	
@@ -1261,7 +1264,7 @@ static ssize_t store_ic_rw(struct i2c_client *client, const char *buf, size_t co
 	int data = 0;
 	
 
-	sscanf(buf, "%29s %d %d", cmd, &reg, &data);
+	sscanf(buf, "%s %d %d", cmd, &reg, &data);
 
 	if ((strcmp(cmd, "write") && strcmp(cmd, "read"))) {
 		return count;
@@ -1754,7 +1757,7 @@ static int touch_fb_notifier_callback(struct notifier_block *self, unsigned long
 	}
 	#endif
 
-	#if !defined ( TOUCH_MODEL_C70 ) && !defined ( TOUCH_MODEL_C90NAS ) && !defined ( TOUCH_MODEL_P1B ) && !defined ( TOUCH_MODEL_P1C ) && !defined ( TOUCH_MODEL_YG ) && !defined ( TOUCH_MODEL_C100N )/* TBD : temporally block ( C70 is not ready ) */
+	#if !defined ( TOUCH_MODEL_C70 ) && !defined ( TOUCH_MODEL_C90NAS ) && !defined ( TOUCH_MODEL_P1B ) && !defined ( TOUCH_MODEL_P1C ) && !defined ( TOUCH_MODEL_YG ) && !defined ( TOUCH_MODEL_M216N ) && !defined ( TOUCH_MODEL_C100N ) && !defined ( TOUCH_MODEL_M216 )/* TBD : temporally block ( C70 is not ready ) */
 	if( pDriverData->bootMode == BOOT_MINIOS ) /* MFTS BOOT */
 	{
 		TOUCH_DBG("MFTS\n");

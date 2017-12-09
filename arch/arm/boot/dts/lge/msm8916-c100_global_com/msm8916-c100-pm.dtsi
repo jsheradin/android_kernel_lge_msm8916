@@ -24,8 +24,7 @@
 	lge,cable-200k = <410000 1200 500>;
 	lge,cable-220k = <485000 1200 500>;
 	lge,cable-270k = <560000 1200 500>;
-	lge,cable-330k = <735000 1200 500>;
-	lge,cable-620k = <955000 1200 500>;
+	lge,cable-330k = <700000 1500 1500>;
 	lge,cable-910k = <1140000 1500 1500>;
 	lge,cable-none = <1900000 990  500>;
 
@@ -51,6 +50,9 @@
 		qcom,freq-mitigation-temp = <110>;
 		qcom,freq-mitigation-temp-hysteresis = <20>;
 		qcom,freq-mitigation-value = <960000>;
+		qcom,limit-temp = <90>;
+		qcom,freq-step = <1>;
+		qcom,core-limit-temp = <100>;
 		};
 };
 
@@ -186,16 +188,16 @@ qcom,pm8916@0 {
 	};
 
 	BLT22_DEFAULT_2050MAH_BATTERY: rt,default-battery-data {
-		rt,vgpara_hcap = <0x8114 0x824B 0x832D 0x84F5 0x8501>;
-		rt,vgpara_lcap = <0x8114 0x824B 0x832D 0x84F5 0x8501>;
+		rt,vgpara_hcap = <0x8114 0x824B 0x83FF 0x84FF 0x8500>;
+		rt,vgpara_lcap = <0x8114 0x824B 0x83FF 0x84FF 0x8500>;
 		rt,r1_gain_hcap = < 0 100 0 365 0 100>;
 		rt,r2_gain_hcap = < 1 250 1 50 1 250>;
-		rt,r3_gain_hcap = < 1 150 0 325 1 150>;
-		rt,r4_gain_hcap = < 1 600 0 50 1 600>;
+		rt,r3_gain_hcap = < 1 650 0 0 1 650>;
+		rt,r4_gain_hcap = < 0 0 0 0 0 0>;
 		rt,r1_gain_lcap = < 0 100 0 365 0 100>;
 		rt,r2_gain_lcap = < 1 250 1 50 1 250>;
-		rt,r3_gain_lcap = < 1 150 0 325 1 150>;
-		rt,r4_gain_lcap = < 1 600 0 50 1 600>;
+		rt,r3_gain_lcap = < 1 650 0 0 1 650>;
+		rt,r4_gain_lcap = < 0 0 0 0 0 0>;
 	};
 
 };
@@ -279,8 +281,7 @@ qcom,pm8916@0 {
 		lge,cable-200k = <410000 1200 500>;
 		lge,cable-220k = <485000 1200 500>;
 		lge,cable-270k = <560000 1200 500>;
-		lge,cable-330k = <735000 1200 500>;
-		lge,cable-620k = <955000 1200 500>;
+		lge,cable-330k = <700000 1500 1500>;
 		lge,cable-910k = <1140000 1500 1500>;
 		lge,cable-none = <1900000 1000  500>;
 

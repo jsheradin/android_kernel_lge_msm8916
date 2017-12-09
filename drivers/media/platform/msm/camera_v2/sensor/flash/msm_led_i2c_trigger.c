@@ -690,9 +690,6 @@ int msm_flash_led_high(struct msm_led_flash_ctrl_t *fctrl)
 	#elif defined(CONFIG_MACH_MSM8916_PH1)
 	    /* Configuration of current, torch : 50mA, strobe :1.1A */
 	    rc =flash_write_reg(fctrl->flash_i2c_client,    0x06, 0x1A);
-	#elif defined(CONFIG_MACH_MSM8916_K5)
-	    /* Configuration of current, torch : 50mA, strobe :1.2A */
-	    rc =flash_write_reg(fctrl->flash_i2c_client,    0x06, 0x1B);
 	#else
 		/* Configuration of current, torch : 50mA, strobe :800mA */
 		rc =flash_write_reg(fctrl->flash_i2c_client,	0x06, 0x17);

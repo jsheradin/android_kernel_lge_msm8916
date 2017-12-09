@@ -687,6 +687,13 @@ config LGE_EVENT_LOCK
       Support for keylock cmd using evdev.
       If you need feature for keylock cmd using evdev, use this.
 
+config TOUCHSCREEN_MIT300_M2
+    bool "quick cover support"
+    default n
+    help
+      Support for quick cover.
+      If you need feature for quick cover, use this.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"

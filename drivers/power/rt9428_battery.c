@@ -1443,7 +1443,11 @@ static void rt9428_polling_work(struct work_struct *work)
 #endif
 
 #if defined(CONFIG_LGE_PM_BATTERY_RT9428_RESET_RECOVER)
+#ifdef CONFIG_MACH_MSM8916_YG_SKT_KR
+	psy = power_supply_get_by_name("usb");
+#else
 	psy = power_supply_get_by_name("ac");
+#endif
 	if (!psy) {
 		pr_err("%s:cannot get charger supply\n", __func__);
 		return;

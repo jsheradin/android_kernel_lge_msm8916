@@ -41,9 +41,10 @@
                 Partron,crosstalk_max = <650>;
                 Partron,ppcount = <85>;
                 Partron,ps_led_current = <5>;     /* 4 : 50mA,  5 : 75mA, 6 : 100mA */
-                Partron,als_gain = <2>;
+                Partron,als_gain = <1>;
                 Partron,als_up_thres = <4>;
                 Partron,als_low_thres = <4>;
+                Partron,als_lux_coeff = <12>;
         };
 
 	/* Acceleration sensor */

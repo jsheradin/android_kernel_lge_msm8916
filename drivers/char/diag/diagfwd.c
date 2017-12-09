@@ -1755,6 +1755,14 @@ static int diagfwd_mux_write_done(unsigned char *buf, int len, int buf_ctxt,
 		if (peripheral >= 0 && peripheral < NUM_SMD_DATA_CHANNELS) {
 			smd_info = &driver->smd_data[peripheral];
 			diag_smd_reset_buf(smd_info, num);
+
+#ifdef CONFIG_LGE_DM_APP
+            if (driver->logging_mode == DM_APP_MODE) {
+                flush_workqueue(smd_info->wq);
+                wake_up(&driver->smd_wait_q);
+            }
+#endif
+
 		} else if (peripheral == APPS_DATA) {
 			diagmem_free(driver, (unsigned char *)buf,
 				     POOL_TYPE_HDLC);

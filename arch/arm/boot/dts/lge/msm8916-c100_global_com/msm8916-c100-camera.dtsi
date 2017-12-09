@@ -11,6 +11,8 @@
  * GNU General Public License for more details.
  */
 
+#include "msm8916-c100n-camera-eeprom.dtsi"
+
 &i2c_4 {
 	led_flash0: qcom,led-flash@11 {
 		compatible                = "qcom,led-flash";
@@ -27,24 +29,35 @@
 		lm3632,default_brightness = <0x9C>;
 		lm3632,max_brightness = <0xFF>;
 		lm3632,enable_pwm = <0>;
+		lm3632,bl_ramp_time = <0x8>; // 50msec
 		lm3632,blmap_size = <256>;
 		lm3632,blmap = <
-			2 2 2 2 2 2 2 2 2 2 2 2 2 2 2 2
-			2 2 3 3 3 3 3 3 3 3 4 4 4 4 4 4
-			4 4 5 5 5 5 5 5 5 5 5 6 6 6 6 6
-			6 6 6 7 7 7 7 7 7 8 8 8 8 9 9 10
-			10 10 11 11 12 12 12 13 13 14 14 14 15 15 16 16
-			16 17 17 18 18 18 19 19 20 20 20 21 21 22 22 22
-			23 23 24 24 24 25 25 26 26 26 27 27 28 29 29 30
-			31 32 32 33 34 35 35 36 37 38 38 39 40 41 41 42
-			43 44 44 45 46 47 47 48 49 50 50 51 52 53 53 54
-			55 56 56 57 58 59 59 60 61 62 62 63 64 65 65 66
-			67 68 69 71 72 73 74 75 77 78 79 80 81 83 84 85
-			86 87 89 90 91 92 93 95 96 97 98 99 101 102 103 104
-			105 107 108 109 110 111 113 114 115 116 117 119 120 121 122 123
-			125 127 128 130 132 134 135 137 139 140 142 144 146 147 149 151
-			152 154 156 158 159 161 163 165 166 168 170 171 173 175 177 178
-			180 182 183 185 187 189 190 192 194 195 197 199 201 202 204 205 >;
+			/*   0 */    2   2   2   2   2   2   2   2   2   2
+			/*  10 */    2   2   2   2   2   2   2   2   3   3
+			/*  20 */    3   3   3   3   3   3   4   4   4   4
+			/*  30 */    4   4   4   4   5   5   5   5   5   5
+			/*  40 */    5   5   5   6   6   6   6   6   6   6
+			/*  50 */    6   6   7   7   7   7   7   7   7   7
+			/*  60 */    8   8   9   9   9   9  10  10  11  11
+			/*  70 */   11  12  12  13  13  13  14  14  15  15
+			/*  80 */   15  16  16  17  17  17  18  18  18  19
+			/*  90 */   19  19  20  20  20  21  21  21  22  22
+			/* 100 */   22  23  23  24  24  24  25  25  25  26
+			/* 110 */   26  27  28  28  29  29  30  31  31  32
+			/* 120 */   33  34  34  35  36  37  37  38  39  40
+			/* 130 */   40  41  42  43  43  44  45  46  46  47
+			/* 140 */   47  48  48  49  50  51  51  52  53  54
+			/* 150 */   54  55  55  56  56  57  58  59  59  60
+			/* 160 */   61  62  63  64  65  66  67  69  70  71
+			/* 170 */   72  73  74  76  77  78  79  80  81  82
+			/* 180 */   83  84  85  86  88  89  91  92  93  94
+			/* 190 */   95  96  97  98  99 100 101 102 103 104
+			/* 200 */  105 106 107 108 109 110 111 112 114 115
+			/* 210 */  117 119 121 123 124 125 127 128 129 131
+			/* 220 */  133 134 136 138 139 141 143 144 145 146
+			/* 230 */  148 150 151 153 154 155 157 158 159 161
+			/* 240 */  163 165 167 169 171 172 174 175 177 178
+			/* 250 */  179 181 183 184 186 187 >;
 
 		cell-index = <0>;
 		label                   = "lm3632";
@@ -70,18 +83,22 @@
 		qcom,cci-master = <0>;
 	};
 
-	eeprom0: qcom,eeprom@0 {
-		cell-index = <0>;
-		reg = <0x0>;
-		qcom,eeprom-name = "t4kb3";
-		compatible = "qcom,eeprom";
-		qcom,slave-addr = <0xA0>;
-		qcom,cci-master = <0>;
-		qcom,num-blocks = <1>;
+	//eeprom dtsi is moved to msm8916-c100n-camera-eeprom.dtsi
 
-		qcom,page0 = <0 0x0 2 0x0 1 20>;
-		qcom,poll0 = <0 0x0 2 0x0 1 20>;
-		qcom,mem0 = <0x802 0x0000 2 0 1 0>;
+	qcom,camera_main_rev_a@0 {
+		revision             = "...rev_a";
+		compatible           = "qcom,t4kb3";
+		reg                  = <0x6E 0x0>;
+		qcom,slave-id        = <0x6E 0x0000 0x1C50>;
+		qcom,csiphy-sd-index = <0>;
+		qcom,csid-sd-index   = <0>;
+		qcom,actuator-src    = <&actuator0>;
+		qcom,led-flash-src   = <&led_flash0>;
+		qcom,eeprom-src      = <&eeprom0_rev_a>;
+		qcom,mount-angle     = <90>;
+		qcom,sensor-name     = "t4kb3";
+
+		//cam_vaf is always-on (shared with sensors)
 
 		cam_vana-supply = <&pm8916_l10>; //2V8_VREG_L10
 
@@ -113,15 +130,20 @@
 
 		qcom,csi-lane-assign = <0x4320>;
 		qcom,csi-lane-mask   = <0x1F>;
+		qcom,sensor-position = <0>;
+		qcom,sensor-mode     = <0>;
+		qcom,cci-master      = <0>;
 
-		qcom,cam-power-seq-type = "sensor_gpio";
-		qcom,cam-power-seq-val = "sensor_gpio_vio";
-		qcom,cam-power-seq-cfg-val = <1>;
-		qcom,cam-power-seq-delay = <20>;
+		status = "ok";
+		clocks = <&clock_gcc clk_mclk0_clk_src>,
+				 <&clock_gcc clk_gcc_camss_mclk0_clk>;
+		clock-names = "cam_src_clk", "cam_clk";
 		qcom,mclk-23880000;
+		//lge,vcm-pwdn = "dw9719";
 	};
 
 	qcom,camera_main@0 {
+		revision             = "rev_b...";
 		compatible           = "qcom,t4kb3";
 		reg                  = <0x6E 0x0>;
 		qcom,slave-id        = <0x6E 0x0000 0x1C50>;
@@ -182,6 +204,7 @@
 		qcom,slave-id        = <0x6C 0x0000 0x1490>;
 		qcom,csiphy-sd-index = <1>;
 		qcom,csid-sd-index   = <1>;
+		qcom,eeprom-src      = <&eeprom1>;
 		qcom,mount-angle     = <270>;
 		qcom,sensor-name     = "t4ka3";
 

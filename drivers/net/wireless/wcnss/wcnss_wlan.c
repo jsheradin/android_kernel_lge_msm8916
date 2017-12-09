@@ -3117,16 +3117,6 @@ void wcnss_flush_work(struct work_struct *work)
 }
 EXPORT_SYMBOL(wcnss_flush_work);
 
-/* wlan prop driver cannot invoke show_stack
- * function directly, so to invoke this function it
- * call wcnss_dump_stack function
- */
-void wcnss_dump_stack(struct task_struct *task)
-{
-	show_stack(task, NULL);
-}
-EXPORT_SYMBOL(wcnss_dump_stack);
-
 /* wlan prop driver cannot invoke cancel_delayed_work_sync
  * function directly, so to invoke this function it call
  * wcnss_flush_delayed_work function
@@ -3238,7 +3228,7 @@ static ssize_t wcnss_wlan_write(struct file *fp, const char __user
 		return -EFAULT;
 
 	if ((UINT32_MAX - count < penv->user_cal_rcvd) ||
-		(penv->user_cal_exp_size < count + penv->user_cal_rcvd)) {
+	     MAX_CALIBRATED_DATA_SIZE < count + penv->user_cal_rcvd) {
 		pr_err(DEVICE " invalid size to write %zu\n", count +
 				penv->user_cal_rcvd);
 		rc = -ENOMEM;

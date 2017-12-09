@@ -122,7 +122,7 @@ qcom,pm8916@0 {
 		rt,r4_gain_lcap = < 1 375 1 300 1 375>;
 	};
 
-	BL45B1F_TCD_3000MAH_BATTERY: rt,tocad-battery-data {
+        BL45B1F_TCD_3000MAH_BATTERY: rt,tcd-battery-data {
 		rt,vgpara_hcap = <0x8137 0x8232 0x8328 0x8478 0x8501>;
 		rt,vgpara_lcap = <0x8137 0x8232 0x8328 0x8478 0x8501>;
 		rt,r1_gain_hcap = < 1 100 0 500 1 100>;

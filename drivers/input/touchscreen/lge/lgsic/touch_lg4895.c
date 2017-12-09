@@ -360,7 +360,7 @@ int lg4895_ic_info(struct device *dev)
 	char rev_str[32] = {0};
 	char ver_str[32] = {0};
 
-	lg4895_xfer_msg_ready(dev, 8);
+	lg4895_xfer_msg_ready(dev, 7);
 
 	ts->xfer->data[0].rx.addr = tc_version;
 	ts->xfer->data[0].rx.buf = (u8 *)&version;
@@ -389,10 +389,6 @@ int lg4895_ic_info(struct device *dev)
 	ts->xfer->data[6].rx.addr = info_cg_type;
 	ts->xfer->data[6].rx.buf = (u8 *)&d->ic_info.cg;
 	ts->xfer->data[6].rx.size = sizeof(d->ic_info.cg);
-
-	ts->xfer->data[7].rx.addr = info_lot_num;
-	ts->xfer->data[7].rx.buf = (u8 *)&d->ic_info.lot;
-	ts->xfer->data[7].rx.size = sizeof(d->ic_info.lot);
 
 	lg4895_xfer_msg(dev, ts->xfer);
 
@@ -428,12 +424,6 @@ int lg4895_ic_info(struct device *dev)
 		(bootmode >> 1 & 0x1) ? "BUSY" : "idle",
 		(bootmode >> 2 & 0x1) ? "done" : "BOOTING",
 		(bootmode >> 3 & 0x1) ? "ERROR" : "ok");
-	TOUCH_I("lot : %d\n", d->ic_info.lot[0]);
-	TOUCH_I("serial : 0x%X\n", d->ic_info.lot[1]);
-	TOUCH_I("date : %04d.%02d.%02d %02d:%02d:%02d Site%d\n",
-		d->ic_info.lot[2] & 0xFFFF, (d->ic_info.lot[2] >> 16 & 0xFF), (d->ic_info.lot[2] >> 24 & 0xFF),
-		d->ic_info.lot[3] & 0xFF, (d->ic_info.lot[3] >> 8 & 0xFF), (d->ic_info.lot[3] >> 16 & 0xFF),
-		(d->ic_info.lot[3] >> 24 & 0xFF));
 	if ((((version >> 16) & 0xFF) != CHIP_ID) || (((version >> 24) & 0xFF) != PROTOCOL_VERSION)) {
 		TOUCH_I("FW is in abnormal state because of ESD or something.\n");
 		ret = -EAGAIN;
@@ -460,10 +450,11 @@ static int lg4895_get_tci_data(struct device *dev, int count)
 		ts->lpwg.code[i].x = rdata[i] & 0xffff;
 		ts->lpwg.code[i].y = (rdata[i] >> 16) & 0xffff;
 
-		if ((ts->lpwg.mode == LPWG_PASSWORD) &&
-				(ts->role.hide_coordinate))
+		#if 0
+		if (ts->lpwg.mode == LPWG_PASSWORD)
 			TOUCH_I("LPWG data xxxx, xxxx\n");
 		else
+		#endif
 			TOUCH_I("LPWG data %d, %d\n",
 				ts->lpwg.code[i].x, ts->lpwg.code[i].y);
 	}
@@ -841,8 +832,6 @@ static int lg4895_clock(struct device *dev, bool onoff)
 	TOUCH_I("lg4895_clock -> %s\n",
 		onoff ? "ON" : d->lcd_mode == 0 ? "OFF" : "SKIP");
 
-	touch_msleep(10);
-
 	return 0;
 }
 
@@ -851,9 +840,7 @@ int lg4895_tc_driving(struct device *dev, int mode)
 	struct touch_core_data *ts = to_touch_core(dev);
 	struct lg4895_data *d = to_lg4895_data(dev);
 	u32 ctrl = 0;
-	u32 running_status = 0;
 	u8 rdata;
-	static u8 recur_chk = 0;
 
 	d->driving_mode = mode;
 	switch (mode) {
@@ -889,51 +876,19 @@ int lg4895_tc_driving(struct device *dev, int mode)
 	/* swipe set */
 	lg4895_swipe_mode(dev, mode);
 
-	/* lg4895 needs the delay for rev1 */
-	if ((REV1 == d->ic_info.wfr) &&
-		((LCD_MODE_U0 == mode) ||
-		(LCD_MODE_U2 == mode)))
+	/* the delay for rev1 only */
+	if ( (REV1 == d->ic_info.wfr) && 
+		((LCD_MODE_U0 == mode) || 
+		(LCD_MODE_U2 == mode)) )
 		touch_msleep(200);
+
 	lg4895_reg_read(dev, spr_subdisp_st, (u8 *)&rdata, sizeof(u32));
 	TOUCH_I("DDI Display Mode = %d\n", rdata);
 	lg4895_reg_write(dev, tc_drive_ctl, &ctrl, sizeof(ctrl));
 	TOUCH_I("lg4895_tc_driving = %d, %x\n", mode, ctrl);
 
 	touch_msleep(20);
-	if ( LCD_MODE_U3_PARTIAL == mode ) {
-		recur_chk = 0;
-		return 0;
-	}
 
-	if ( recur_chk ) {
-		TOUCH_E("%s : running status is already checked\n", __func__);
-		recur_chk = 0;
-		return 1;
-	}
-	if ( lg4895_reg_read(dev, tc_status, (u32 *)&running_status, sizeof(u32)) < 0) {
-		TOUCH_E("check spi module\n");
-		recur_chk = 0;
-		return 1;
-	} else {
-		TOUCH_I("running_status : %X\n", running_status);
-		running_status &= 0x1F;
-	}
-	if ( ((0x10==running_status || 0xF==running_status || 0x0==running_status) && (LCD_MODE_STOP!=mode)) || /* u0,u2,u3 */
-		((mode==LCD_MODE_STOP) && (0x0!=running_status))) {
-			TOUCH_E("Miss command [mode:%d][status:%X]\n",
-				mode, running_status);
-			recur_chk = 1;
-			touch_interrupt_control(dev, INTERRUPT_DISABLE);
-			lg4895_power(dev, POWER_OFF);
-			lg4895_power(dev, POWER_ON);
-			touch_msleep(90);
-			ts->driver->init(dev);
-			touch_interrupt_control(dev, INTERRUPT_ENABLE);
-	} else {
-		TOUCH_I("Command done [mode:%d][status:%X]\n", mode, running_status);
-	}
-
-	recur_chk = 0;
 	return 0;
 }
 
@@ -1348,9 +1303,9 @@ static int lg4895_debug_option(struct device *dev, u32 *data)
 		break;
 	case DEBUG_OPTION_1:
 		if (enable)	/* ASC */
-			TOUCH_I("Debug Option 1 LG4895 ASC on disable");
+			lg4895_asc_control(dev, ASC_ON);
 		else
-			TOUCH_I("Debug Option 1 LG4895 ASC off disable");
+			lg4895_asc_control(dev, ASC_OFF);
 		break;
 	case DEBUG_OPTION_2:
 		TOUCH_I("Debug Info %s\n", enable ? "Enable" : "Disable");
@@ -1368,25 +1323,6 @@ static int lg4895_debug_option(struct device *dev, u32 *data)
 	}
 
 	return 0;
-}
-
-static void lg4895_BLU_jitter_work_func(struct work_struct *BLU_jitter_work)
-{
-	u8 level=0;
-	u16 interval=0x2EB;
-
-	touch_msleep(interval);
-	TOUCH_I("level : [%d], interval[%d]\n", level, interval);
-	lm3697_lcd_backlight_set_level(level);
-	lm3632_lcd_backlight_set_level(level);
-
-	interval=0x118;
-	level=0xFF;
-	touch_msleep(interval);
-
-	TOUCH_I("level : [%d], interval[%d]\n", level, interval);
-	lm3697_lcd_backlight_set_level(level);
-	lm3632_lcd_backlight_set_level(level);
 }
 
 static void lg4895_fb_notify_work_func(struct work_struct *fb_notify_work)
@@ -1435,10 +1371,14 @@ static int lg4895_notify(struct device *dev, ulong event, void *data)
 	case NOTIFY_CONNECTION:
 		TOUCH_I("NOTIFY_CONNECTION!\n");
 		ret = lg4895_usb_status(dev, *(u32 *)data);
+		if (lg4895_asc_usable(dev))	/* ASC */
+			lg4895_asc_toggle_delta_check(dev);
 		break;
 	case NOTIFY_WIRELEES:
 		TOUCH_I("NOTIFY_WIRELEES!\n");
 		ret = lg4895_wireless_status(dev, *(u32 *)data);
+		if (lg4895_asc_usable(dev))	/* ASC */
+			lg4895_asc_toggle_delta_check(dev);
 		break;
 	case NOTIFY_IME_STATE:
 		TOUCH_I("NOTIFY_IME_STATE!\n");
@@ -1453,6 +1393,8 @@ static int lg4895_notify(struct device *dev, ulong event, void *data)
 		TOUCH_I("NOTIFY_CALL_STATE!\n");
 		ret = lg4895_reg_write(dev, REG_CALL_STATE,
 			(u32 *)data, sizeof(u32));
+		if (lg4895_asc_usable(dev))	/* ASC */
+			lg4895_asc_toggle_delta_check(dev);
 		break;
 	case NOTIFY_DEBUG_OPTION:
 		TOUCH_I("NOTIFY_DEBUG_OPTION!\n");
@@ -1460,14 +1402,10 @@ static int lg4895_notify(struct device *dev, ulong event, void *data)
 		break;
 	case NOTIFY_ONHAND_STATE:
 		TOUCH_I("LG4895 doesn't support NOTIFY_ONHAND_STATE!\n");
-		break;
-	/* for lcd */
-	case LCD_EVENT_TOUCH_DRIVER_REGISTERED:
-	case LCD_EVENT_TOUCH_WATCH_LUT_UPDATE:
-	case LCD_EVENT_TOUCH_WATCH_POS_UPDATE:
-	case LCD_EVENT_TOUCH_PROXY_STATUS:
-	case LCD_EVENT_TOUCH_ESD_DETECTED:
-		TOUCH_I("NOTIFY %lu called\n", event);
+		if (lg4895_asc_usable(dev)) {	/* ASC */
+			lg4895_asc_toggle_delta_check(dev);
+			lg4895_asc_write_onhand(dev, *(u32 *)data);
+		}
 		break;
 	default:
 		TOUCH_E("%lu is not supported\n", event);
@@ -1481,7 +1419,6 @@ static void lg4895_init_works(struct lg4895_data *d)
 {
 	INIT_DELAYED_WORK(&d->font_download_work, lg4895_font_download);
 	INIT_DELAYED_WORK(&d->fb_notify_work, lg4895_fb_notify_work_func);
-	INIT_DELAYED_WORK(&d->BLU_jitter_work, lg4895_BLU_jitter_work_func);
 }
 
 static void lg4895_init_locks(struct lg4895_data *d)
@@ -1519,11 +1456,8 @@ static int lg4895_probe(struct device *dev)
 	lg4895_init_locks(d);
 
 	if (touch_boot_mode() == TOUCH_CHARGER_MODE) {
-		/* U3P driving and maintain 100ms before Deep sleep */
-		lg4895_tc_driving(dev, LCD_MODE_U3_PARTIAL);
 		touch_gpio_init(ts->reset_pin, "touch_reset");
 		touch_gpio_direction_output(ts->reset_pin, 1);
-		touch_msleep(80);
 		/* Deep Sleep */
 		lg4895_deep_sleep(dev);
 		return 0;
@@ -1537,6 +1471,7 @@ static int lg4895_probe(struct device *dev)
 	lg4895_sic_abt_probe();
 	atomic_set(&ts->state.debug_option_mask, DEBUG_OPTION_2);
 
+	lg4895_asc_init(dev);	/* ASC */
 
 	return 0;
 }
@@ -1572,9 +1507,6 @@ static int lg4895_fw_compare(struct device *dev, const struct firmware *fw)
 	bin.minor = fw->data[bin_ver_offset + 1];
 
 	memcpy(pid, &fw->data[bin_pid_offset], 8);
-
-	if (device->major < binary->major)
-		ts->force_fwup = 1;
 
 	if (ts->force_fwup) {
 		update = 1;
@@ -1805,9 +1737,6 @@ static int lg4895_resume(struct device *dev)
 		}
 	}
 	if (touch_boot_mode() == TOUCH_CHARGER_MODE) {
-		/* U3P driving and maintain 100ms at Resume */
-		lg4895_tc_driving(dev, LCD_MODE_U3_PARTIAL);
-		touch_msleep(80);
 		lg4895_deep_sleep(dev);
 		return -EPERM;
 	}
@@ -1875,6 +1804,16 @@ static int lg4895_init(struct device *dev)
 			d->watch.ext_wdata.time.disp_waton)
 		ext_watch_get_current_time(dev, NULL, NULL);
 
+	if (lg4895_asc_usable(dev)) {	/* ASC */
+		if (atomic_read(&ts->state.core) == CORE_UPGRADE)
+			lg4895_asc_get_fw_sensitivity(dev);
+
+		if (atomic_read(&ts->state.core) == CORE_NORMAL) {
+			lg4895_asc_toggle_delta_check(dev);
+			lg4895_asc_write_onhand(dev,
+					atomic_read(&ts->state.onhand));
+		}
+	}
 
 	return 0;
 }
@@ -1933,20 +1872,10 @@ int lg4895_check_status(struct device *dev)
 		length += snprintf(checking_log + length,
 				checking_log_size - length, "[9]Abnormal status Detected");
 	}
-	if (status & (1 << 10) ||
-		ic_status & 1) {
-		TOUCH_I("h/w:%d, f/w:%d\n", (ic_status&(1<<1)), (status&1<<10));
+	if (status & (1 << 10)) {
 		checking_log_flag = 1;
 		length += snprintf(checking_log + length,
-			checking_log_size - length, "[10]System Error Detected");
-		if (d->lcd_mode == LCD_MODE_U0) {
-			ret = -ERESTART;
-		} else {
-			u8 esd = 1;
-			ret = touch_atomic_notifier_call(LCD_EVENT_TOUCH_ESD_DETECTED, (void*)&esd);
-			if (ret)
-				TOUCH_E("check the value\n");
-		}
+				checking_log_size - length, "[10]System Error Detected");
 	}
 	if (status & (1 << 13)) {
 		checking_log_flag = 1;
@@ -1976,15 +1905,8 @@ int lg4895_check_status(struct device *dev)
 
 	if ((ic_status & 1) || (ic_status & (1 << 3))) {
 		TOUCH_I("%s : Watchdog Exception - status : %x, ic_status : %x\n",
-					__func__, status, ic_status);
-		if (d->lcd_mode == LCD_MODE_U0) {
-			ret = -ERESTART;
-		} else {
-			u8 esd = 1;
-			ret = touch_atomic_notifier_call(LCD_EVENT_TOUCH_ESD_DETECTED, (void*)&esd);
-			if (ret)
-				TOUCH_E("check the value\n");
-		}
+				__func__, status, ic_status);
+		ret = -ERESTART;
 	}
 
 	if (ret == -ERESTART)
@@ -2145,7 +2067,7 @@ int lg4895_debug_info(struct device *dev)
 	return ret;
 }
 
-int lg4895_irq_abs_data(struct device *dev)
+static int lg4895_irq_abs_data(struct device *dev)
 {
 	struct touch_core_data *ts = to_touch_core(dev);
 	struct lg4895_data *d = to_lg4895_data(dev);
@@ -2162,10 +2084,10 @@ int lg4895_irq_abs_data(struct device *dev)
 	/* check if palm detected */
 	if (data[0].track_id == PALM_ID) {
 		if (data[0].event == TOUCHSTS_DOWN) {
-			ts->is_cancel = 1;
+			ts->is_palm = 1;
 			TOUCH_I("Palm Detected\n");
 		} else if (data[0].event == TOUCHSTS_UP) {
-			ts->is_cancel = 0;
+			ts->is_palm = 0;
 			TOUCH_I("Palm Released\n");
 		}
 		ts->tcount = 0;
@@ -2289,6 +2211,9 @@ int lg4895_irq_handler(struct device *dev)
 		goto error;
 	if (d->info.wakeup_type == ABS_MODE) {
 		ret = lg4895_irq_abs(dev);
+		if (lg4895_asc_delta_chk_usable(dev))	/* ASC */
+			queue_delayed_work(ts->wq,
+					&(d->asc.finger_input_work), 0);
 	} else {
 		ret = lg4895_irq_lpwg(dev);
 	}
@@ -2551,6 +2476,7 @@ static int lg4895_register_sysfs(struct device *dev)
 
 	lg4895_watch_register_sysfs(dev);
 	lg4895_prd_register_sysfs(dev);
+	lg4895_asc_register_sysfs(dev);	/* ASC */
 	lg4895_sic_abt_register_sysfs(&ts->kobj);
 
 	return 0;

@@ -36,8 +36,8 @@
 #define DEEP_SLEEP_TO_LPWG 1
 #define DEEP_SLEEP_TO_ACTIVE 3
 
-#define PROXY_FAR 1
-#define PROXY_NEAR 0
+#define PROXY_FAR 0
+#define PROXY_NEAR 1
 
 //LGE_UPDATE_S (june1014.lee@lge.com. 2015.03.04). SRE
 #if defined(CONFIG_LGE_P1_SRE_SUPPORTED)
@@ -59,10 +59,15 @@ enum mode_change_cmd {
 	LGE_PANEL_CMD_U3_READY,
 	LGE_PANEL_CMD_PROXIMITY_U2_TO_U3,
 	LGE_PANEL_CMD_PROXIMITY_U3_TO_U2,
+	LGE_PANEL_CMD_MEMWRITE,
 	LGE_PANEL_CMD_CHANGE_NUM,
 	LGE_PANEL_CMD_NONE,
 };
-
+enum img_tune_mode {
+	LGE_PANEL_SH_ON = 0,
+	LGE_PANEL_CE_ON,
+	LGE_PANEL_IMG_TUNE_NUM
+};
 enum watch_ctl_type {
     WATCH_POS_UPDATE = 0,
     WATCH_LUT_UPDATE
@@ -97,9 +102,8 @@ struct lge_pan_data {
 	struct dsi_panel_cmds rsp_nvm_write;
 	bool do_rsp_nvm_write;
 
-	int vpnl_en_gpio;
-	int tpvdd_en_gpio;
-	int bkltex_en_gpio;
+    int tpvdd_en_gpio;
+    int bkltex_en_gpio;
 };
 
 #define MAX_PANEL_ID_LEN 64

@@ -79,9 +79,23 @@
 #define MAX17048_VERSION_NO             0x11
 #define MAX17048_VERSION_NO2            0x12
 
+#ifdef CONFIG_LGE_PM_BATT_PROFILE
+#define BATTERY_SOC_100 10000
+#define BATTERY_SOC_Y1 9700 //real battery SOC level
+#define BATTERY_SOC_Y2 500  //real battery SOC level
+#define BATTERY_SOC_X1 9600 //modified battery SOC level
+#define BATTERY_SOC_X2 700  //modified battery SOC level
+#endif
+#ifdef CONFIG_LGE_PM_BATT_PROFILE_DEBUG
+long batt_soc_original =0; //for battery log
+long batt_soc_modify =0; // for battery log
+#endif
 struct max17048_chip {
 	struct i2c_client		*client;
 	struct delayed_work		work;
+#ifdef CONFIG_LGE_PM_BATT_PROFILE_DEBUG
+	struct delayed_work 	soc_level_log;
+#endif
 	struct work_struct		alert_work;
 	struct wake_lock		alert_lock;
 	struct power_supply		*batt_psy;
@@ -114,6 +128,22 @@ int max17048_lge_power_test_flag = 1;
 #endif
 
 int max17048_set_rcomp_by_temperature(struct i2c_client *client);
+#ifdef CONFIG_LGE_PM_BATT_PROFILE_DEBUG
+static void max17048_soc_level_log(struct work_struct *work)
+{
+	struct max17048_chip *chip;
+	chip = container_of(work, struct max17048_chip, soc_level_log.work);
+	if (chip == NULL) {
+		pr_err("%s : Called before init\n", __func__);
+		return;
+	}
+	pr_info("%s : batt_soc_modify : %d, batt_soc_original : %d,\
+		 voltage : %d\n" ,__func__,
+		(int)batt_soc_modify, (int)batt_soc_original, chip->voltage);
+	schedule_delayed_work(&chip->soc_level_log, 6000);
+	return;
+}
+#endif
 
 static int max17048_write_word(struct i2c_client *client, int reg, u16 value)
 {
@@ -193,6 +223,9 @@ static int max17048_get_capacity_from_soc(void)
 {
 	u8 buf[2];
 	long batt_soc = 0;
+#ifdef CONFIG_LGE_PM_BATT_PROFILE
+	long batt_soc_temp = 0;
+#endif
 
 	if (ref == NULL)
 		return 100;
@@ -211,8 +244,66 @@ static int max17048_get_capacity_from_soc(void)
 	/*Adj SOC = (FG SOC-Empty)/(Full-Empty)*100*/
 	batt_soc = (batt_soc-((ref->model_data->empty)*100000))
 		/(MAX17048_RESCALE_SOC-(ref->model_data->empty))*10000;
+#ifdef CONFIG_LGE_PM_BATT_PROFILE
+	if (ref->model_data->batt_profile_enabled) {
+		batt_soc /= 100000;
+		batt_soc_temp = batt_soc;
+#ifdef CONFIG_LGE_PM_BATT_PROFILE_DEBUG
+		batt_soc_original = batt_soc;
+#endif
+#ifdef LINEARITY_UNDER_5LEVEL//for linearity under 5% level
+		if (batt_soc_temp > 0 && batt_soc_temp <= BATTERY_SOC_X2)
+		{
+			batt_soc_temp = batt_soc_temp*(BATTERY_SOC_Y2)/(BATTERY_SOC_X2);
+		}
+#endif
+		if(batt_soc_temp > 180 && batt_soc_temp <= 260)
+		{
+			batt_soc_temp = 200;
+		}
+		else if (batt_soc_temp > 260 && batt_soc_temp <= 420)
+		{
+			batt_soc_temp = 300;
+		}
+		else if (batt_soc_temp > 420 && batt_soc_temp <= 560)
+		{
+			batt_soc_temp = 400;
+		}
+		else if (batt_soc_temp > 560 && batt_soc_temp <= BATTERY_SOC_X2)
+		{
+			batt_soc_temp = 500;
+		}
+		else if ((BATTERY_SOC_X2 < batt_soc_temp) &&
+				(batt_soc_temp <= BATTERY_SOC_X1))
+		{
+			batt_soc_temp = BATTERY_SOC_Y2 +
+				(batt_soc_temp*(BATTERY_SOC_Y1-BATTERY_SOC_Y2)-
+				BATTERY_SOC_X2*(BATTERY_SOC_Y1-BATTERY_SOC_Y2))/
+				(BATTERY_SOC_X1-BATTERY_SOC_X2);
+		}
+		else if ((BATTERY_SOC_X1 < batt_soc_temp) &&
+				(batt_soc_temp <= BATTERY_SOC_100))
+		{
+			batt_soc_temp = BATTERY_SOC_Y1 +
+				(batt_soc_temp*(BATTERY_SOC_100-BATTERY_SOC_Y1)-
+				BATTERY_SOC_X1*(BATTERY_SOC_100-BATTERY_SOC_Y1))/
+				(BATTERY_SOC_100-BATTERY_SOC_X1);
+		}
+		else
+		{
+			batt_soc_temp = batt_soc;
+		}
+		batt_soc = (batt_soc_temp/100);
+#ifdef CONFIG_LGE_PM_BATT_PROFILE_DEBUG
+		batt_soc_modify = batt_soc;
+		batt_soc_original /= 100;
+#endif
+	} else {
 	batt_soc /= 10000000;
-
+	}
+#else
+	batt_soc /= 10000000;
+#endif
 	pr_err(KERN_INFO "%s: rescalied soc : %d\n", __func__, (int)(batt_soc));
 
 	if (batt_soc > 100)
@@ -895,6 +986,10 @@ static int max17048_parse_dt(struct device *dev,
 	rc = of_property_read_u32(dev_node, "max17048,full_design",
 			&mdata->full_design);
 
+#ifdef CONFIG_LGE_PM_BATT_PROFILE
+	mdata->batt_profile_enabled = of_property_read_bool(dev_node,
+			"max17048,batt_profile");
+#endif
 	rc = of_property_read_u32(dev_node, "max17048,rcomp",
 			&mdata->rcomp);
 	rc = of_property_read_u32(dev_node, "max17048,temp_co_hot",
@@ -904,6 +999,14 @@ static int max17048_parse_dt(struct device *dev,
 	rc = of_property_read_u32(dev_node, "max17048,empty",
 			&mdata->empty);
 
+#ifdef CONFIG_LGE_PM_BATT_PROFILE
+	pr_err("[MAX17048] platform data : rcomp = %d, temp_co_hot = %d," \
+		"temp_co_cold = %d, alert_threshold = 0x%x, full_design = %d," \
+		"empty = %d, batt_profile = %d\n",
+		mdata->rcomp, mdata->temp_co_hot, mdata->temp_co_cold,
+		mdata->alert_threshold, mdata->full_design, mdata->empty,
+		mdata->batt_profile_enabled);
+#else
 	pr_err(KERN_INFO "[MAX17048] platform data : "\
 			"rcomp = %d, "\
 			"temp_co_hot = %d, "\
@@ -917,7 +1020,7 @@ static int max17048_parse_dt(struct device *dev,
 			mdata->alert_threshold,
 			mdata->full_design,
 			mdata->empty);
-
+#endif
 	return rc;
 }
 #endif
@@ -1109,6 +1212,10 @@ static int max17048_probe(struct i2c_client *client,
 #endif
 
 #ifdef CONFIG_LGE_PM
+#ifdef CONFIG_LGE_PM_BATT_PROFILE_DEBUG
+	INIT_DELAYED_WORK(&chip->soc_level_log, max17048_soc_level_log);
+	schedule_delayed_work(&chip->soc_level_log, 1000);
+#endif
 	chip->battery = max17048_ps;
 
 	rc = power_supply_register(&chip->client->dev, &chip->battery);

@@ -108,7 +108,8 @@ static TouchDeviceSpecificFunction *pDeviceSpecificFunction[MAX_DEVICE_SUPPORT] 
 		#endif
 
 	#elif defined ( TOUCH_MODEL_C70 ) || defined ( TOUCH_MODEL_C90 ) || defined ( TOUCH_MODEL_Y90 ) || defined ( TOUCH_MODEL_Y70 ) || defined ( TOUCH_MODEL_C90NAS)\
-        || defined( TOUCH_MODEL_P1B ) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N )
+        || defined( TOUCH_MODEL_P1B ) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N ) || defined ( TOUCH_MODEL_M216N ) \
+		|| defined ( TOUCH_MODEL_M216 )
 
 		#if defined ( TOUCH_DEVICE_S3320 )
 		&S3320_Func,
@@ -336,7 +337,7 @@ void TouchGetModelConfig(TouchDriverData *pDriverData)
 
 	pConfig->protocol_type = MT_PROTOCOL_B;
 	
-	#elif defined ( TOUCH_MODEL_C70 ) || defined ( TOUCH_MODEL_C90 ) || defined ( TOUCH_MODEL_Y90 ) || defined ( TOUCH_MODEL_Y70 ) || defined ( TOUCH_MODEL_C90NAS) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N )
+	#elif defined ( TOUCH_MODEL_C70 ) || defined ( TOUCH_MODEL_C90 ) || defined ( TOUCH_MODEL_Y90 ) || defined ( TOUCH_MODEL_Y70 ) || defined ( TOUCH_MODEL_C90NAS) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N ) || defined ( TOUCH_MODEL_M216N ) || defined ( TOUCH_MODEL_M216 )
 
 	pConfig->button_support = 0;
 	pConfig->number_of_button = 0;
@@ -428,7 +429,8 @@ void TouchPowerModel( int isOn )
 
 	
 	#elif defined ( TOUCH_MODEL_C70 ) || defined ( TOUCH_MODEL_Y90 )  || defined ( TOUCH_MODEL_Y70 )  || defined ( TOUCH_MODEL_C90 ) || defined ( TOUCH_MODEL_C90NAS) \
-    || defined( TOUCH_MODEL_P1B ) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N )
+    || defined( TOUCH_MODEL_P1B ) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N ) || defined ( TOUCH_MODEL_M216N ) \
+    || defined ( TOUCH_MODEL_M216 )
 
 	/* there is no power control */
 	
@@ -459,7 +461,7 @@ void TouchAssertResetModel( void )
 
 	gpio_set_value(TOUCH_GPIO_RESET, 0);
 
-	#elif defined ( TOUCH_MODEL_C70 ) || defined ( TOUCH_MODEL_C90NAS) || defined( TOUCH_MODEL_P1B ) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N )
+	#elif defined ( TOUCH_MODEL_C70 ) || defined ( TOUCH_MODEL_C90NAS) || defined( TOUCH_MODEL_P1B ) || defined ( TOUCH_MODEL_P1C) || defined ( TOUCH_MODEL_YG ) || defined ( TOUCH_MODEL_C100N ) || defined ( TOUCH_MODEL_M216N ) || defined ( TOUCH_MODEL_M216 )
 
 	gpio_set_value(TOUCH_GPIO_RESET, 0);
 	
