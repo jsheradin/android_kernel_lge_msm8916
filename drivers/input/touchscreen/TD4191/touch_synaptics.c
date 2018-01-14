@@ -4246,8 +4246,6 @@ enum error_type synaptics_ts_get_data(struct i2c_client *client,
 				"LPWG SWIPE mode\n");
 				if (get_swipe_data(client) == 0) {
 					wakeup_by_swipe = true;
-					if (send_uevent_lpwg(client, LPWG_SWIPE_DOWN) == 0)
-						swipe_disable(ts);
 				}
 			} else {
 				TOUCH_DEBUG(DEBUG_BASE_INFO || DEBUG_LPWG,

@@ -138,6 +138,7 @@ struct touch_operation_role {
 	u32	thermal_check;
 	u32	use_hover_finger;
 	u32	use_rmi_dev;
+	u32	mfts_lpwg;
 	u32	palm_ctrl_mode;
 	u32	mini_os_finger_amplitude;
 	u32 ub_i2c_addr;
@@ -788,7 +789,7 @@ void touch_driver_unregister(void);
 void set_touch_handle(struct i2c_client *client, void *h_touch);
 void *get_touch_handle(struct i2c_client *client);
 void send_uevent(struct device *dev, char *string[2]);
-int send_uevent_lpwg(struct i2c_client *client, int type);
+void send_uevent_lpwg(struct i2c_client *client, int type);
 int touch_i2c_read(struct i2c_client *client, u8 reg, int len, u8 *buf);
 int touch_i2c_write(struct i2c_client *client, u8 reg, int len, u8 *buf);
 int touch_i2c_write_byte(struct i2c_client *client, u8 reg, u8 data);
